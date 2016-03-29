@@ -1,0 +1,4 @@
+*.o
+hosts.cfg
+server
+client
