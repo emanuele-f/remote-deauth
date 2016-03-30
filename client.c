@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -35,7 +36,10 @@
 //~ #include "debug.h"
 
 static GHashTable * whois = NULL;  // contains owns MAC -> Name mapping
+static sigset_t unblock_mask;
 static int serverfd = -1;
+static int curline = 0;
+static int maxlines = 10;
 
 /**********************************************************************/
 #include <ncurses.h>
@@ -59,16 +63,21 @@ static WINDOW * hostsw = NULL;
 static void init_ui() {
     initscr();
     noecho();
+    cbreak();
+    curs_set(FALSE);
 
     // Nonblocking getch: return after UI_INPUT_DELAY/10 seconds
     halfdelay(UI_INPUT_DELAY);
-    curs_set(0);
 
     // Colors init where available
     if(has_colors() == TRUE) {
     }
     
     mainw = newwin(UI_WINDOW_H, UI_WINDOW_W, 0, 0);
+    
+    // NOTE: this must be set on the top window!!
+    keypad(mainw, TRUE);
+    
     headerw = derwin(mainw,
       UI_WINDOW_HEADER_TOTH,
       UI_WINDOW_W - 2 * UI_WINDOW_PADDING_X,
@@ -81,8 +90,8 @@ static void init_ui() {
     hostsw = derwin(wbox,
       UI_WINDOW_HOSTS_TOTH,
       UI_WINDOW_W - 4 * UI_WINDOW_PADDING_X,
-      UI_WINDOW_PADDING_Y, UI_WINDOW_PADDING_X);
-    
+      UI_WINDOW_PADDING_Y, UI_WINDOW_PADDING_X);    
+
     //~ box(mainw, 0, 0);
     //~ box(headerw, 0, 0);
     box(wbox, 0, 0);
@@ -97,9 +106,12 @@ static void init_ui() {
 }while(0)
 
 #define error_msg(msg, ...) do{\
-    sleep(1);\
     debug_msg(msg, ##__VA_ARGS__ );\
-    exit(1);\
+    sleep(1);\
+}while(0)
+
+#define perror_msg(msg) do{\
+    error_msg("%s: %s", msg, strerror(errno));\
 }while(0)
 
 static void end_ui() {
@@ -110,15 +122,18 @@ static void end_ui() {
     endwin();
 }
 
-#define xprintw(win, x, ...) do{\
+/*#define xprintw(win, x, ...) do{\
     int _y, _x;\
     (void)(_x);\
     getyx(win, _y, _x);\
     mvwprintw(win, _y, x, ##__VA_ARGS__);\
-}while(0)
+}while(0)*/
 
 static void bssid_iterate_fn(gpointer key, gpointer value, gpointer udata) {
     char * essid = NULL;
+    int x, y;
+    (void)x;
+    getyx(hostsw, y, x);
 
     struct bssid_record * rec = (struct bssid_record *)value;
     char * manualname = (char *) g_hash_table_lookup(whois, rec->ssid.ssid);
@@ -127,19 +142,32 @@ static void bssid_iterate_fn(gpointer key, gpointer value, gpointer udata) {
     else
         essid = (char *)rec->essid;
 
+    if (y == curline) {
+        wprintw(hostsw, "*");
+    } else {
+        wprintw(hostsw, "-");
+    }
     wprintw(hostsw, "BSSID %s <%s>", rec->ssid.ssid_s, essid);
-    xprintw(hostsw, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
+    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
     
     for (GSList * item = rec->hosts; item != NULL; item = item->next) {
         const struct ssid_record * host = (const struct ssid_record *) item->data;
+        y++;
 
         const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
+        
+        if (y == curline) {
+            //~ wprintw(hostsw, "*");
+        } else {
+            //~ wprintw(hostsw, "-");
+        }
+        
         wprintw(hostsw, "\t%s ", host->ssid_s);
         
         if (stationame)
             wprintw(hostsw, "<%s>", stationame);
             
-        xprintw(hostsw, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
+        mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
     }
 }
 
@@ -178,7 +206,7 @@ static int send_clear_command(u_char * mac) {
 static int read_names_mapping(const char * fname) {
     FILE * f = fopen(fname, "rt");
     if (!f) {
-        perror("Cannot open names mapping: ");
+        perror_msg("Cannot open names mapping: ");
         return -1;
     }
 
@@ -274,7 +302,7 @@ static int server_connect() {
     serverfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (serverfd < 0) {
-        perror("Cannot create socket");
+        perror_msg("Cannot create socket");
         return -1;
     }
 
@@ -289,7 +317,59 @@ static int server_connect() {
     serv_addr.sin_port = htons(SERVER_PORT);
 
     if (connect(serverfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-        perror("connect()");
+        perror_msg("connect()");
+        return -1;
+    }
+
+    return 0;
+}
+
+static void now_exit(int code) {
+    if (serverfd >= 0)
+        close(serverfd);
+    serverfd = -1;
+    destroy_env();
+    end_ui();
+    exit(code);
+}
+
+static void sigHandler(int signo) {
+    if (signo == SIGINT || signo == SIGTERM || signo == SIGHUP)
+        now_exit(0);
+}
+
+static int process_setup() {
+    // disable signals now
+    if (sigprocmask(0, NULL, &unblock_mask) == -1) {
+        perror_msg("sigprocmask() error while getting set:");
+        return -1;
+    }
+    sigset_t block_mask = unblock_mask;
+    if (sigaddset(&block_mask, SIGINT) == -1 ||
+      sigaddset(&block_mask, SIGTERM) == -1 ||
+      sigaddset(&block_mask, SIGHUP) == -1) {
+        perror_msg("sigaddset() error");
+        return -1;
+    }
+    if (sigprocmask(SIG_SETMASK, &block_mask, NULL) == -1) {
+        perror_msg("sigprocmask() error while setting set");
+        return -1;
+    }
+
+    struct sigaction sa = {};
+    sa.sa_handler = sigHandler;
+    sa.sa_mask = block_mask;
+
+    if(sigaction(SIGINT, &sa, NULL) == -1) {
+        perror_msg("sigaction(SIGINT) error");
+        return -1;
+    }
+    if(sigaction(SIGTERM, &sa, NULL) == -1) {
+        perror_msg("sigaction(SIGTERM) error");
+        return -1;
+    }
+    if(sigaction(SIGHUP, &sa, NULL) == -1) {
+        perror_msg("sigaction(SIGHUP) error");
         return -1;
     }
 
@@ -299,35 +379,85 @@ static int server_connect() {
 int main() {
     init_ui();
     
-    if(init_env() < 0)
+    if (process_setup() < 0) {
+        end_ui();
         return 1;
+    }
+    
+    if(init_env() < 0) {
+        end_ui();
+        return 1;
+    }
         
     debug_msg("Connecting to the server...");
 
-    if(server_connect() < 0)
+    if(server_connect() < 0) {
+        destroy_env();
+        end_ui();
         return 1;
+    }
         
     debug_msg("Connected!");
 
     read_names_mapping("hosts.cfg");
-    sleep(1);
+    //~ usleep(1000*500);
+    
+    fd_set readfds;
+    struct timespec timeout = {0};
+    FD_ZERO(&readfds);
+    int ch;
 
     while(1) {
-        if (read_model(serverfd) < 0)
-            break;
+        // re-init on each cycle
+        FD_SET(serverfd, &readfds);
             
-        wclear(headerw);
-        wprintw(headerw, "Scanned 3 APs with 10 total hosts");
-        mvwprintw(headerw, 0, UI_WINDOW_HEADER_RIGHT, "updated: %s", time_format(time(0)));
-        wrefresh(headerw);
-        
-        ui_update_hosts();
+        switch(pselect(serverfd+1, &readfds, NULL, NULL, &timeout, &unblock_mask)) {
+            case -1:
+                if (errno != EINTR) {
+                    perror_msg("select() error:");
+                    now_exit(1);
+                }
+                break;
+            case 0:
+                // this slows down the loop
+                if ((ch = wgetch(mainw)) != ERR) {
+                    switch(ch) {
+                        case KEY_UP:
+                            if (curline > 0) {
+                                curline--;
+                                ui_update_hosts();
+                            }
+                            break;
+                        case KEY_DOWN:
+                            if (curline < maxlines-1) {
+                                curline++;
+                                ui_update_hosts();
+                            }
+                            break;
+                        case ' ':
+                            break;
+                        case 'q':
+                        case 0x1b:
+                            now_exit(0);
+                            break;
+                    }
+                }
+                break;
+            default:
+                if (FD_ISSET(serverfd, &readfds)) {
+                    if (read_model(serverfd) < 0)
+                        now_exit(1);
+                        
+                    wclear(headerw);
+                    wprintw(headerw, "Scanned 3 APs with 10 total hosts");
+                    mvwprintw(headerw, 0, UI_WINDOW_HEADER_RIGHT, "updated: %s", time_format(time(0)));
+                    wrefresh(headerw);
+                    
+                    ui_update_hosts();
+                }
+        }
     }
 
-    close(serverfd);
-
-    destroy_env();
-    
-    end_ui();
+    now_exit(0);
     return 0;
 }
