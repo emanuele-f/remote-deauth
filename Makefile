@@ -14,8 +14,8 @@ clean:
 server: server.c ieee802_11/ieee802_11.o model.o debug.o util.o internals.o
 	gcc -Wall $(CGLAGS) -o $@ $^ `pkg-config --libs glib-2.0` -lpcap
 
-client: client.c util.o model.o debug.o
-	gcc -Wall $(CGLAGS) -o $@ $^ `pkg-config --libs glib-2.0`
+client: client.c util.o model.o
+	gcc -Wall $(CGLAGS) -o $@ $^ `pkg-config --libs glib-2.0` -lncurses
 
 internals.o: internals.c
 	gcc -Wall $(CGLAGS) -c -o $@ $<

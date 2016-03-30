@@ -32,10 +32,112 @@
 #include "config.h"
 #include "util.h"
 
-#include "debug.h"
+//~ #include "debug.h"
 
 static GHashTable * whois = NULL;  // contains owns MAC -> Name mapping
 static int serverfd = -1;
+
+/**********************************************************************/
+#include <ncurses.h>
+
+#define UI_INPUT_DELAY 1
+#define UI_WINDOW_H 24
+#define UI_WINDOW_W 80
+#define UI_WINDOW_PADDING_X 2
+#define UI_WINDOW_PADDING_Y 1
+#define UI_WINDOW_HEADER_H 1
+#define UI_WINDOW_HEADER_RIGHT 50
+#define UI_WINDOW_HEADER_TOTH (UI_WINDOW_HEADER_H + UI_WINDOW_PADDING_Y)
+#define UI_WINDOW_HOSTS_TOTH (UI_WINDOW_H - 4 * UI_WINDOW_PADDING_Y - UI_WINDOW_HEADER_TOTH)
+
+static WINDOW * mainw = NULL;
+static WINDOW * headerw = NULL;
+static WINDOW * wbox = NULL;
+static WINDOW * hostsw = NULL;
+
+static void init_ui() {
+    initscr();
+    noecho();
+
+    // Nonblocking getch: return after UI_INPUT_DELAY/10 seconds
+    halfdelay(UI_INPUT_DELAY);
+    curs_set(0);
+
+    // Colors init where available
+    if(has_colors() == TRUE) {
+    }
+    
+    mainw = newwin(UI_WINDOW_H, UI_WINDOW_W, 0, 0);
+    headerw = derwin(mainw,
+      UI_WINDOW_HEADER_TOTH,
+      UI_WINDOW_W - 2 * UI_WINDOW_PADDING_X,
+      UI_WINDOW_PADDING_Y, UI_WINDOW_PADDING_X);
+    wbox = derwin(mainw,
+      UI_WINDOW_HOSTS_TOTH + 2 * UI_WINDOW_PADDING_Y,
+      UI_WINDOW_W - 2 * UI_WINDOW_PADDING_X,
+      UI_WINDOW_HEADER_TOTH + UI_WINDOW_PADDING_Y, UI_WINDOW_PADDING_X);
+      
+    hostsw = derwin(wbox,
+      UI_WINDOW_HOSTS_TOTH,
+      UI_WINDOW_W - 4 * UI_WINDOW_PADDING_X,
+      UI_WINDOW_PADDING_Y, UI_WINDOW_PADDING_X);
+    
+    //~ box(mainw, 0, 0);
+    //~ box(headerw, 0, 0);
+    box(wbox, 0, 0);
+    //~ box(hostsw, 0, 0);
+    wrefresh(mainw);
+}
+
+#define debug_msg(msg, ...) do {\
+    wclear(headerw);\
+    wprintw(headerw, msg, ##__VA_ARGS__);\
+    wrefresh(headerw);\
+}while(0)
+
+#define error_msg(msg, ...) do{\
+    sleep(1);\
+    debug_msg(msg, ##__VA_ARGS__ );\
+    exit(1);\
+}while(0)
+
+static void end_ui() {
+    delwin(hostsw);
+    delwin(wbox);
+    delwin(headerw);
+    delwin(mainw);
+    endwin();
+}
+
+static void bssid_iterate_fn(gpointer key, gpointer value, gpointer udata) {
+    char * essid = NULL;
+
+    struct bssid_record * rec = (struct bssid_record *)value;
+    char * manualname = (char *) g_hash_table_lookup(whois, rec->ssid.ssid);
+    if (manualname)
+        essid = manualname;
+    else
+        essid = (char *)rec->essid;
+
+    wprintw(hostsw, "BSSID %s <%s>\n", rec->ssid.ssid_s, essid);
+    for (GSList * item = rec->hosts; item != NULL; item = item->next) {
+        const struct ssid_record * host = (const struct ssid_record *) item->data;
+
+        const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
+        if (stationame)
+            wprintw(hostsw, "\t%s <%s> (seen %s)\n", host->ssid_s, stationame, time_format(host->lseen));
+        else
+            wprintw(hostsw, "\t%s (seen %s)\n", host->ssid_s, time_format(host->lseen));
+    }
+}
+
+void ui_update_hosts() {
+    wclear(hostsw);
+    g_hash_table_foreach((GHashTable *)aps, bssid_iterate_fn, NULL);
+    wrefresh(hostsw);
+}
+
+/**********************************************************************/
 
 #define BLACKLIST_CMD_PRE "blacklist "
 #define CLEAR_CMD_PRE "clear "
@@ -124,7 +226,7 @@ static int read_names_mapping(const char * fname) {
     }
     fclose(f);
 
-    printf("Loaded %u MAC mappings (%d black, %d white)\n", (defctr+whitectr+blackctr), blackctr, whitectr);
+    debug_msg("Loaded %u MAC mappings (%d black, %d white)", (defctr+whitectr+blackctr), blackctr, whitectr);
 
     return 0;
 }
@@ -137,7 +239,7 @@ static int init_env() {
         g_hash_table_destroy(aps);
         g_hash_table_destroy(hosts);
         aps = NULL;
-        fprintf(stderr, "Cannot allocate whois memory\n");
+        error_msg("Cannot allocate whois memory");
         return -1;
     }
 
@@ -145,6 +247,12 @@ static int init_env() {
         return -1;
 
     return 0;
+}
+
+static void destroy_env() {
+    g_hash_table_destroy(whois);        // frees keys(macs) and values(names)
+    whois = NULL;
+    destroy_model();
 }
 
 static int server_connect() {
@@ -160,7 +268,7 @@ static int server_connect() {
 
     serveraddr = gethostbyname(SERVER_ADDRESS);
     if (serveraddr == NULL) {
-        fprintf(stderr, "Cannot resolve server address\n");
+        error_msg("Cannot resolve server address");
         return -1;
     }
 
@@ -177,30 +285,37 @@ static int server_connect() {
 }
 
 int main() {
+    init_ui();
+    
     if(init_env() < 0)
         return 1;
+        
+    debug_msg("Connecting to the server...");
 
     if(server_connect() < 0)
         return 1;
-
-    printf("Connected\n");
+        
+    debug_msg("Connected!");
 
     read_names_mapping("hosts.cfg");
+    sleep(1);
 
     while(1) {
         if (read_model(serverfd) < 0)
             break;
-
-        // clear screen
-        printf("\033[2J\033[1;1H");
-        debug_print_bssids(aps, whois);
+            
+        wclear(headerw);
+        wprintw(headerw, "Scanned 3 APs with 10 total hosts");
+        mvwprintw(headerw, 0, UI_WINDOW_HEADER_RIGHT, "updated: %s", time_format(time(0)));
+        wrefresh(headerw);
+        
+        ui_update_hosts();
     }
 
     close(serverfd);
 
-    g_hash_table_destroy(whois);        // frees keys(macs) and values(names)
-    whois = NULL;
-    destroy_model();
-
+    destroy_env();
+    
+    end_ui();
     return 0;
 }
