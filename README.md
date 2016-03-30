@@ -24,6 +24,7 @@ change channel.
 If you have installed the aircrack suite, you can use:
 
 `sudo airmon-ng start [iface]`
+
 `sudo airodump-ng [mon_iface] -c [channel]`
 
 Current setup assumes mon0 as the monitor interface device.
@@ -41,7 +42,7 @@ Press spacebar to add/remove host from blacklist.
 
 You can create a mac -> name mapping file `hosts.cfg` with the format:
 
-`xx:xx:xx:xx:xx:xx alias`
+`xx:xx:xx:xx:xx:xx | alias`
 
 which will be used to tag mac addresses owners in the program.
 
