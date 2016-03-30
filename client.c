@@ -128,6 +128,27 @@ static int is_expanded(const u_char * bssid) {
     return g_slist_find_custom(notexpanded, bssid, ssid_in_list_fn) == NULL;
 }
 
+static int toggle_expansion() {
+    // must be an ap to expand
+    if (! ap_lookup(curmac))
+        return -1;
+        
+    GSList * node = g_slist_find_custom(notexpanded, curmac, ssid_in_list_fn);
+        
+    if (node == NULL) {
+        // do not expand
+        u_char * ownmac = (u_char *) malloc(6);
+        memcpy(ownmac, curmac, 6);
+        notexpanded = g_slist_append(notexpanded, ownmac);
+    } else {
+        // expand
+        free(node->data);
+        notexpanded = g_slist_delete_link(notexpanded, node);
+    }
+    
+    return 0;
+}
+
 /*#define xprintw(win, x, ...) do{\
     int _y, _x;\
     (void)(_x);\
@@ -159,7 +180,7 @@ void ui_update_hosts() {
             wprintw(hostsw, "+");
         }
         
-        wprintw(hostsw, "BSSID %s <%s>", rec->ssid.ssid_s, essid);
+        wprintw(hostsw, "BSSID %s <%s>[%u]", rec->ssid.ssid_s, essid, g_slist_length(rec->hosts));
         mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
         y++;
         
@@ -378,6 +399,7 @@ static int init_env() {
 
 static void destroy_env() {
     g_hash_table_destroy(whois);        // frees keys(macs) and values(names)
+    g_slist_free_full(notexpanded, free_fn);
     whois = NULL;
     destroy_model();
 }
@@ -512,13 +534,7 @@ int main() {
                         case KEY_UP:
                             if (curline > 0) {
                                 curline--;
-                                save_selection();
-                                
-                                //TODO DEBUG
-                                char m[MAC_ADDRESS_CHAR_SIZE];
-                                etheraddr_string(curmac, m);
-                                debug_msg("MAC: %s", m);
-                                
+                                save_selection();                                
                                 ui_update_hosts();
                             }
                             break;
@@ -526,19 +542,38 @@ int main() {
                             if (curline < maxlines-1) {
                                 curline++;
                                 save_selection();
-                                
-                                //TODO DEBUG
-                                char m[MAC_ADDRESS_CHAR_SIZE];
-                                etheraddr_string(curmac, m);
-                                debug_msg("MAC: %s", m);
-                                
                                 ui_update_hosts();
                             }
                             break;
+                        case KEY_PPAGE:
+                            curline = max(0, curline - UI_WINDOW_HOSTS_TOTH);
+                            save_selection();
+                            ui_update_hosts();
+                            break;
+                        case KEY_NPAGE:
+                            curline = min(maxlines-1, curline + UI_WINDOW_HOSTS_TOTH);
+                            save_selection();
+                            ui_update_hosts();
+                            break;
+                        case KEY_HOME:
+                            curline = 0;
+                            save_selection();
+                            ui_update_hosts();
+                            break;
+                        case KEY_END:
+                            curline = maxlines-1;
+                            save_selection();
+                            ui_update_hosts();
+                            break;
                         case ' ':
                             break;
+                        case KEY_ENTER:
+                            if (toggle_expansion() == 0) {
+                                restore_selection();
+                                ui_update_hosts();
+                            }
+                            break;
                         case 'q':
-                        case 0x1b:
                             now_exit(0);
                             break;
                     }

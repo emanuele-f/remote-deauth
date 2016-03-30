@@ -33,6 +33,8 @@
 #define WLANSTR_case(c) case (c): __hrmxe = #c; break;
 #define WLANSTR_default(d) default: __hrmxe = d; break;
 #define WLANSTR_esac(store) } (store) = __hrmxe; }
+#define min(x, y) ((x) <= (y) ? (x) : (y))
+#define max(x, y) ((x) >= (y) ? (x) : (y))
 
 #define WLANSTR_UNKNOWN "*unknown*"
 
