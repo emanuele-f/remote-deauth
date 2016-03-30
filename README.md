@@ -18,13 +18,25 @@ No broadcast deauth allowed.
 - make server
 - sudo ./server
 
-You will need an external tool to start the interface in monitor mode.
-Current setup assumes mon0 device name.
+You will need an external tool to start the interface in monitor mode and to
+change channel.
+
+If you have installed the aircrack suite, you can use:
+
+`
+sudo airmon-ng start [iface]
+sudo airodump-ng [mon_iface] -c [channel]
+`
+
+Current setup assumes mon0 as the monitor interface device.
 
 client
 ------
-Should presend in a ncurses interface the monitor data from the server.
-Spacebar should toggle host selection for blacklisting.
+Connects to the server and presents the monitor data in an ncurses interface.
+
+Change selction with arrow keys.
+Press enter on an AP to expand/collapse its hosts list.
+Press spacebar to add/remove host from blacklist
 
 - make client
 - ./client
