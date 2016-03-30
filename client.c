@@ -40,7 +40,8 @@ static GSList * notexpanded = NULL; // contains onwn MAC: list of not expdanded 
 static sigset_t unblock_mask;
 static int serverfd = -1;
 static int curline = 0;             // the current selected line
-static int maxlines = 0;            // the lines the viewport lines available
+static int vpsize = 0;              // the lines the viewport lines available
+static int voffset = 0;             // the first displayed line of the viewport
 static u_char curmac[6] = {0};      // the current selected mac
 
 /**********************************************************************/
@@ -157,7 +158,8 @@ static int toggle_expansion() {
 }while(0)*/
 
 void ui_update_hosts() {
-    int y = 0;
+    int y = 0;              // window real y
+    int vpy = 0;            // viewport virtual y
     
     wclear(hostsw);
     
@@ -172,17 +174,20 @@ void ui_update_hosts() {
             
         int isexpanded =  is_expanded(rec->ssid.ssid);
 
-        if (y == curline) {
-            wprintw(hostsw, "*");
-        } else if (isexpanded) {
-            wprintw(hostsw, "-");
-        } else {
-            wprintw(hostsw, "+");
+        if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {
+            if (vpy == curline) {
+                wprintw(hostsw, "*");
+            } else if (isexpanded) {
+                wprintw(hostsw, "-");
+            } else {
+                wprintw(hostsw, "+");
+            }
+            
+            wprintw(hostsw, "BSSID %s <%s>[%u]", rec->ssid.ssid_s, essid, g_slist_length(rec->hosts));
+            mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
+            y++;
         }
-        
-        wprintw(hostsw, "BSSID %s <%s>[%u]", rec->ssid.ssid_s, essid, g_slist_length(rec->hosts));
-        mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
-        y++;
+        vpy++;
         
         if (isexpanded) {
             for (GSList * item = rec->hosts; item != NULL; item = item->next) {
@@ -190,17 +195,20 @@ void ui_update_hosts() {
 
                 const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
                 
-                if (y == curline) {
-                    wprintw(hostsw, "*");
-                }
-                
-                wprintw(hostsw, "\t%s ", host->ssid_s);
-                
-                if (stationame)
-                    wprintw(hostsw, "<%s>", stationame);
+                if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {
+                    if (vpy == curline) {
+                        wprintw(hostsw, "*");
+                    }
                     
-                mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
-                y++;
+                    wprintw(hostsw, "\t%s ", host->ssid_s);
+                    
+                    if (stationame)
+                        wprintw(hostsw, "<%s>", stationame);
+                        
+                    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
+                    y++;
+                }
+                vpy++;
             }
         }
     }
@@ -235,7 +243,7 @@ static int send_clear_command(u_char * mac) {
 }
 
 /* Saves selected mac based on curline variable */
-static int save_selection() {
+static int ui_save_selection() {
     int l = 0;
     u_char * found = NULL;
     
@@ -272,15 +280,31 @@ static int save_selection() {
     return -1;
 }
 
+/* Updates the current selection and the view over the viewport */
+static void ui_update_sel(int newv) {
+    const int corrected = max(min(newv, vpsize-1), 0);
+    
+    curline = corrected;
+    
+    if (curline < voffset)
+        voffset = curline;
+    else if (curline >= voffset + UI_WINDOW_HOSTS_TOTH)
+        voffset = curline - UI_WINDOW_HOSTS_TOTH + 1;
+    
+    ui_save_selection();
+    ui_update_hosts();
+}
+
+
 /* 
  * Restores curline based on selected mac variable.
  * 
  * Defaults to 0.
  * 
- * Also update maxlines variable
+ * Also update vpsize variable
  * 
  */
-static int restore_selection() {
+static int ui_restore_selection() {
     int l = 0;
     int found = -1;
     
@@ -303,13 +327,13 @@ static int restore_selection() {
         l++;
     }
     
-    maxlines = l;
+    vpsize = l;
     
     if (found >= 0) {
-        curline = found;
+        ui_update_sel(found);
         return 0;
     } else {
-        curline = 0;
+        ui_update_sel(0);
         return -1;
     }
 }
@@ -508,8 +532,8 @@ int main() {
         
     debug_msg("Connected!");
 
-    read_names_mapping("hosts.cfg");
-    //~ usleep(1000*500);
+    if (read_names_mapping("hosts.cfg") == 0)
+        usleep(1000*600);
     
     fd_set readfds;
     struct timespec timeout = {0};
@@ -532,44 +556,29 @@ int main() {
                 if ((ch = wgetch(mainw)) != ERR) {
                     switch(ch) {
                         case KEY_UP:
-                            if (curline > 0) {
-                                curline--;
-                                save_selection();                                
-                                ui_update_hosts();
-                            }
+                            ui_update_sel(curline - 1);
                             break;
                         case KEY_DOWN:
-                            if (curline < maxlines-1) {
-                                curline++;
-                                save_selection();
-                                ui_update_hosts();
-                            }
+                            ui_update_sel(curline + 1);
                             break;
                         case KEY_PPAGE:
-                            curline = max(0, curline - UI_WINDOW_HOSTS_TOTH);
-                            save_selection();
-                            ui_update_hosts();
+                            ui_update_sel(curline - UI_WINDOW_HOSTS_TOTH);
                             break;
                         case KEY_NPAGE:
-                            curline = min(maxlines-1, curline + UI_WINDOW_HOSTS_TOTH);
-                            save_selection();
-                            ui_update_hosts();
+                            ui_update_sel(curline + UI_WINDOW_HOSTS_TOTH);
                             break;
                         case KEY_HOME:
-                            curline = 0;
-                            save_selection();
-                            ui_update_hosts();
+                            ui_update_sel(0);
                             break;
                         case KEY_END:
-                            curline = maxlines-1;
-                            save_selection();
-                            ui_update_hosts();
+                            ui_update_sel(vpsize-1);
                             break;
                         case ' ':
                             break;
                         case KEY_ENTER:
+                        case 0x0a:
                             if (toggle_expansion() == 0) {
-                                restore_selection();
+                                ui_restore_selection();
                                 ui_update_hosts();
                             }
                             break;
@@ -583,15 +592,13 @@ int main() {
                 if (FD_ISSET(serverfd, &readfds)) {
                     if (read_model(serverfd) < 0)
                         now_exit(1);
-                        
-                    restore_selection();
                     
                     wclear(headerw);
                     wprintw(headerw, "Scanned 3 APs with 10 total hosts");
                     mvwprintw(headerw, 0, UI_WINDOW_HEADER_RIGHT, "updated: %s", time_format(time(0)));
                     wrefresh(headerw);
                     
-                    ui_update_hosts();
+                    ui_restore_selection();
                 }
         }
     }
