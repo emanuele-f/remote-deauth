@@ -56,7 +56,9 @@ static u_char curmac[6] = {0};      // the current selected mac
 #define UI_WINDOW_HEADER_RIGHT 50
 #define UI_WINDOW_HEADER_TOTH (UI_WINDOW_HEADER_H + UI_WINDOW_PADDING_Y)
 #define UI_WINDOW_HOSTS_TOTH (UI_WINDOW_H - 4 * UI_WINDOW_PADDING_Y - UI_WINDOW_HEADER_TOTH)
-#define UI_WINDOW_HOSTS_RIGHT 55
+#define UI_WINDOW_HOSTS_RIGHT 56
+#define UI_PALETTE_NORMAL 1
+#define UI_PALETTE_BLACKLISTED 2
 
 static WINDOW * mainw = NULL;
 static WINDOW * headerw = NULL;
@@ -74,7 +76,12 @@ static void init_ui() {
 
     // Colors init where available
     if(has_colors() == TRUE) {
+        start_color();
+        use_default_colors();
+        init_pair(UI_PALETTE_NORMAL, COLOR_WHITE, COLOR_BLACK);
+        init_pair(UI_PALETTE_BLACKLISTED, COLOR_BLACK, COLOR_RED);
     }
+    //TODO decide what to do if colors are unavailable
     
     mainw = newwin(UI_WINDOW_H, UI_WINDOW_W, 0, 0);
     
@@ -175,6 +182,11 @@ void ui_update_hosts() {
         int isexpanded =  is_expanded(rec->ssid.ssid);
 
         if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {
+            int palette = UI_PALETTE_NORMAL;
+            if (rec->ssid.blacklisted)
+                palette = UI_PALETTE_BLACKLISTED;
+            attron(COLOR_PAIR(palette));
+            
             if (vpy == curline) {
                 wprintw(hostsw, "*");
             } else if (isexpanded) {
@@ -185,6 +197,8 @@ void ui_update_hosts() {
             
             wprintw(hostsw, "BSSID %s <%s>[%u]", rec->ssid.ssid_s, essid, g_slist_length(rec->hosts));
             mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
+            attroff(COLOR_PAIR(palette));
+            
             y++;
         }
         vpy++;
@@ -196,6 +210,11 @@ void ui_update_hosts() {
                 const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
                 
                 if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {
+                    int palette = UI_PALETTE_NORMAL;
+                    if (host->blacklisted)
+                        palette = UI_PALETTE_BLACKLISTED;
+                    attron(COLOR_PAIR(palette));
+                    
                     if (vpy == curline) {
                         wprintw(hostsw, "*");
                     }
@@ -206,6 +225,8 @@ void ui_update_hosts() {
                         wprintw(hostsw, "<%s>", stationame);
                         
                     mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
+                    attroff(COLOR_PAIR(palette));
+                    
                     y++;
                 }
                 vpy++;
@@ -512,11 +533,6 @@ static int process_setup() {
 int main() {
     init_ui();
     
-    if (process_setup() < 0) {
-        end_ui();
-        return 1;
-    }
-    
     if(init_env() < 0) {
         end_ui();
         return 1;
@@ -531,6 +547,11 @@ int main() {
     }
         
     debug_msg("Connected!");
+    
+    if (process_setup() < 0) {
+        end_ui();
+        return 1;
+    }
 
     if (read_names_mapping("hosts.cfg") == 0)
         usleep(1000*600);
