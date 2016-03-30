@@ -78,7 +78,7 @@ static void init_ui() {
     if(has_colors() == TRUE) {
         start_color();
         use_default_colors();
-        init_pair(UI_PALETTE_NORMAL, COLOR_WHITE, COLOR_BLACK);
+        init_pair(UI_PALETTE_NORMAL, COLOR_CYAN, COLOR_BLACK);
         init_pair(UI_PALETTE_BLACKLISTED, COLOR_BLACK, COLOR_RED);
     }
     //TODO decide what to do if colors are unavailable
@@ -185,7 +185,6 @@ void ui_update_hosts() {
             int palette = UI_PALETTE_NORMAL;
             if (rec->ssid.blacklisted)
                 palette = UI_PALETTE_BLACKLISTED;
-            attron(COLOR_PAIR(palette));
             
             if (vpy == curline) {
                 wprintw(hostsw, "*");
@@ -195,9 +194,14 @@ void ui_update_hosts() {
                 wprintw(hostsw, "+");
             }
             
-            wprintw(hostsw, "BSSID %s <%s>[%u]", rec->ssid.ssid_s, essid, g_slist_length(rec->hosts));
+            wprintw(hostsw, "BSSID ");
+            wattron(hostsw, COLOR_PAIR(palette));
+            wprintw(hostsw, "%s", rec->ssid.ssid_s);
+            wattroff(hostsw, COLOR_PAIR(palette));
+            if (essid)
+                wprintw(hostsw, " <%s>", essid);
+            wprintw(hostsw, " [%u]", g_slist_length(rec->hosts));
             mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
-            attroff(COLOR_PAIR(palette));
             
             y++;
         }
@@ -209,24 +213,29 @@ void ui_update_hosts() {
 
                 const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
                 
-                if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {
-                    int palette = UI_PALETTE_NORMAL;
-                    if (host->blacklisted)
-                        palette = UI_PALETTE_BLACKLISTED;
-                    attron(COLOR_PAIR(palette));
-                    
+                if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {                    
                     if (vpy == curline) {
-                        wprintw(hostsw, "*");
+                        wprintw(hostsw, "*   ");
+                    } else if (host->blacklisted) {
+                        wprintw(hostsw, "B   ");
+                    }
+                    else {
+                        wprintw(hostsw, "    ");
                     }
                     
-                    wprintw(hostsw, "\t%s ", host->ssid_s);
+                    int palette = UI_PALETTE_NORMAL;
+                    if (host->blacklisted) {
+                        palette = UI_PALETTE_BLACKLISTED;
+                    }
+                    
+                    wattron(hostsw, COLOR_PAIR(palette));
+                    wprintw(hostsw, "%s", host->ssid_s);
+                    wattroff(hostsw, COLOR_PAIR(palette));    
                     
                     if (stationame)
-                        wprintw(hostsw, "<%s>", stationame);
-                        
-                    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
-                    attroff(COLOR_PAIR(palette));
+                        wprintw(hostsw, " <%s>", stationame);
                     
+                    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
                     y++;
                 }
                 vpy++;
@@ -449,6 +458,31 @@ static void destroy_env() {
     destroy_model();
 }
 
+static int toggle_host_blacklist() {
+    int bl = -1;
+    
+    struct bssid_record * ap = ap_lookup(curmac);    
+    if (ap) {
+        bl = ! ap->ssid.blacklisted;
+        ap->ssid.blacklisted = bl;
+    } else {
+        struct ssid_record * host = (struct ssid_record *) g_hash_table_lookup(hosts, curmac);
+        if (host) {
+            bl = ! host->blacklisted;
+            host->blacklisted = bl;
+        }
+    }
+    
+    if (bl < 0)
+        return -1;
+        
+    if (bl)
+        send_blacklist_command(curmac);
+    else
+        send_clear_command(curmac);
+    return 0;
+}
+
 static int server_connect() {
     struct sockaddr_in serv_addr = {0};
     struct hostent * serveraddr;
@@ -595,6 +629,8 @@ int main() {
                             ui_update_sel(vpsize-1);
                             break;
                         case ' ':
+                            if (toggle_host_blacklist() == 0)
+                                ui_update_hosts();
                             break;
                         case KEY_ENTER:
                         case 0x0a:
