@@ -82,12 +82,12 @@ static void init_ui() {
         init_pair(UI_PALETTE_BLACKLISTED, COLOR_BLACK, COLOR_RED);
     }
     //TODO decide what to do if colors are unavailable
-    
+
     mainw = newwin(UI_WINDOW_H, UI_WINDOW_W, 0, 0);
-    
+
     // NOTE: this must be set on the top window!!
     keypad(mainw, TRUE);
-    
+
     headerw = derwin(mainw,
       UI_WINDOW_HEADER_TOTH,
       UI_WINDOW_W - 2 * UI_WINDOW_PADDING_X,
@@ -96,11 +96,11 @@ static void init_ui() {
       UI_WINDOW_HOSTS_TOTH + 2 * UI_WINDOW_PADDING_Y,
       UI_WINDOW_W - 2 * UI_WINDOW_PADDING_X,
       UI_WINDOW_HEADER_TOTH + UI_WINDOW_PADDING_Y, UI_WINDOW_PADDING_X);
-      
+
     hostsw = derwin(wbox,
       UI_WINDOW_HOSTS_TOTH,
       UI_WINDOW_W - 4 * UI_WINDOW_PADDING_X,
-      UI_WINDOW_PADDING_Y, UI_WINDOW_PADDING_X);    
+      UI_WINDOW_PADDING_Y, UI_WINDOW_PADDING_X);
 
     //~ box(mainw, 0, 0);
     //~ box(headerw, 0, 0);
@@ -140,9 +140,9 @@ static int toggle_expansion() {
     // must be an ap to expand
     if (! ap_lookup(curmac))
         return -1;
-        
+
     GSList * node = g_slist_find_custom(notexpanded, curmac, ssid_in_list_fn);
-        
+
     if (node == NULL) {
         // do not expand
         u_char * ownmac = (u_char *) malloc(6);
@@ -153,7 +153,7 @@ static int toggle_expansion() {
         free(node->data);
         notexpanded = g_slist_delete_link(notexpanded, node);
     }
-    
+
     return 0;
 }
 
@@ -167,9 +167,9 @@ static int toggle_expansion() {
 void ui_update_hosts() {
     int y = 0;              // window real y
     int vpy = 0;            // viewport virtual y
-    
+
     wclear(hostsw);
-    
+
     for (GSList * link = aps; link != NULL; link=link->next) {
         char * essid = NULL;
         struct bssid_record * rec = (struct bssid_record *)link->data;
@@ -178,14 +178,14 @@ void ui_update_hosts() {
             essid = manualname;
         else
             essid = (char *)rec->essid;
-            
+
         int isexpanded =  is_expanded(rec->ssid.ssid);
 
         if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {
             int palette = UI_PALETTE_NORMAL;
             if (rec->ssid.blacklisted)
                 palette = UI_PALETTE_BLACKLISTED;
-            
+
             if (vpy == curline) {
                 wprintw(hostsw, "*");
             } else if (isexpanded) {
@@ -193,7 +193,7 @@ void ui_update_hosts() {
             } else {
                 wprintw(hostsw, "+");
             }
-            
+
             wprintw(hostsw, "BSSID ");
             wattron(hostsw, COLOR_PAIR(palette));
             wprintw(hostsw, "%s", rec->ssid.ssid_s);
@@ -202,18 +202,18 @@ void ui_update_hosts() {
                 wprintw(hostsw, " %s", essid);
             wprintw(hostsw, " [%u]", g_slist_length(rec->hosts));
             mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
-            
+
             y++;
         }
         vpy++;
-        
+
         if (isexpanded) {
             for (GSList * item = rec->hosts; item != NULL; item = item->next) {
                 const struct ssid_record * host = (const struct ssid_record *) item->data;
 
                 const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
-                
-                if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {                    
+
+                if (vpy >= voffset && vpy < (voffset + UI_WINDOW_HOSTS_TOTH)) {
                     if (vpy == curline) {
                         wprintw(hostsw, "*   ");
                     } else if (host->blacklisted) {
@@ -222,19 +222,19 @@ void ui_update_hosts() {
                     else {
                         wprintw(hostsw, "    ");
                     }
-                    
+
                     int palette = UI_PALETTE_NORMAL;
                     if (host->blacklisted) {
                         palette = UI_PALETTE_BLACKLISTED;
                     }
-                    
+
                     wattron(hostsw, COLOR_PAIR(palette));
                     wprintw(hostsw, "%s", host->ssid_s);
-                    wattroff(hostsw, COLOR_PAIR(palette));    
-                    
+                    wattroff(hostsw, COLOR_PAIR(palette));
+
                     if (stationame)
                         wprintw(hostsw, " %s", stationame);
-                    
+
                     mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
                     y++;
                 }
@@ -242,7 +242,7 @@ void ui_update_hosts() {
             }
         }
     }
-    
+
     wrefresh(hostsw);
 }
 
@@ -250,10 +250,6 @@ void ui_update_hosts() {
 
 #define BLACKLIST_CMD_PRE "blacklist "
 #define CLEAR_CMD_PRE "clear "
-
-enum Section {
-    Section_Hosts, Section_Blacklist, Section_Whitelist
-};
 
 #define _send_generic_mac_command(mac, preamble) do{\
     char buf[MAC_ADDRESS_CHAR_SIZE + sizeof(preamble) -1] = preamble;\
@@ -276,89 +272,89 @@ static int send_clear_command(u_char * mac) {
 static int ui_save_selection() {
     int l = 0;
     u_char * found = NULL;
-    
+
     for(GSList * aplink = aps; aplink != NULL; aplink=aplink->next) {
         struct bssid_record * ap = (struct bssid_record *)aplink->data;
-        
+
         if (curline == l) {
             found = ap->ssid.ssid;
             break;
         }
-        
+
         if (is_expanded(ap->ssid.ssid)) {
             for (GSList * link = ap->hosts; link != NULL; link=link->next) {
                 l++;
-                
+
                 if (curline == l) {
                     found = ((struct ssid_record *)link->data)->ssid;
                     break;
                 }
             }
-            
+
             if (found)
                 break;
         }
-        
+
         l++;
     }
-    
+
     if (found) {
         memcpy(curmac, found, 6);
         return 0;
     }
-    
+
     return -1;
 }
 
 /* Updates the current selection and the view over the viewport */
 static void ui_update_sel(int newv) {
     const int corrected = max(min(newv, vpsize-1), 0);
-    
+
     curline = corrected;
-    
+
     if (curline < voffset)
         voffset = curline;
     else if (curline >= voffset + UI_WINDOW_HOSTS_TOTH)
         voffset = curline - UI_WINDOW_HOSTS_TOTH + 1;
-    
+
     ui_save_selection();
     ui_update_hosts();
 }
 
 
-/* 
+/*
  * Restores curline based on selected mac variable.
- * 
+ *
  * Defaults to 0.
- * 
+ *
  * Also update vpsize variable
- * 
+ *
  */
 static int ui_restore_selection() {
     int l = 0;
     int found = -1;
-    
+
     for(GSList * aplink = aps; aplink != NULL; aplink=aplink->next) {
         struct bssid_record * ap = (struct bssid_record *)aplink->data;
-        
+
         if(memcmp(ap->ssid.ssid, curmac, 6) == 0)
             found = l;
-        
+
         if (is_expanded(ap->ssid.ssid)) {
             for (GSList * link = ap->hosts; link != NULL; link=link->next) {
                 struct ssid_record * host = (struct ssid_record *)link->data;
                 l++;
-                
+
                 if (memcmp(host->ssid, curmac, 6) == 0)
                     found = l;
             }
         }
-        
+
         l++;
     }
-    
+
     vpsize = l;
-    
+
     if (found >= 0) {
         ui_update_sel(found);
         return 0;
@@ -376,62 +372,30 @@ static int read_names_mapping(const char * fname) {
     }
 
     char buf[256];
-    char sec[32];
     uint intmac[6];
-    uint defctr = 0;
-    uint whitectr = 0;
-    uint blackctr = 0;
-    enum Section section = Section_Hosts;
+    uint count;
 
     while(fgets(buf, sizeof(buf), f)) {
-        if (sscanf(buf, "[%[^]]]\n", sec) == 1) {
-            // Section specifier
-            if (strcmp(sec, "hosts") == 0)
-                section = Section_Hosts;
-            else if (strcmp(sec, "blacklist") == 0)
-                section = Section_Blacklist;
-            else if (strcmp(sec, "whitelist") == 0)
-                section = Section_Whitelist;
+        u_char * mac = (u_char *)malloc(6);
+        char * name = (char *)calloc(128, 1);
+
+        if (sscanf(buf, "%2x:%2x:%2x:%2x:%2x:%2x | %127s\n",
+          intmac, intmac+1, intmac+2, intmac+3, intmac+4, intmac+5, name) == 7) {
+            for (int i=0; i<6; i++)
+                mac[i] = (u_char)intmac[i];
+
+            // table retains ownership on mac and name: it's up to it to free
+            g_hash_table_insert(whois, mac, name);
+
+            count++;
         } else {
-            //TODO add malloc check
-            u_char * mac = (u_char *)malloc(6);
-            char * name = (char *)calloc(128, 1);
-
-            if (sscanf(buf, "%2x:%2x:%2x:%2x:%2x:%2x | %127s\n",
-              intmac, intmac+1, intmac+2, intmac+3, intmac+4, intmac+5, name) == 7) {
-                for (int i=0; i<6; i++)
-                    mac[i] = (u_char)intmac[i];
-
-                // table retains ownership on mac and name: it's up to it to free
-                g_hash_table_insert(whois, mac, name);
-
-                switch(section) {
-                    case Section_Hosts:
-                        if (send_clear_command(mac) < 0)
-                            return -1;
-                        defctr++;
-                        break;
-                    case Section_Blacklist:
-                        //// blacklist has own macs
-                        //TODO maybe blacklist into model
-                        if (send_blacklist_command(mac) < 0)
-                            return -1;
-                        blackctr++;
-                        break;
-                    case Section_Whitelist:
-                        //TODO whitelist
-                        whitectr++;
-                        break;
-                }
-            } else {
-                free(mac);
-                free(name);
-            }
+            free(mac);
+            free(name);
         }
     }
     fclose(f);
 
-    debug_msg("Loaded %u MAC mappings (%d black, %d white)", (defctr+whitectr+blackctr), blackctr, whitectr);
+    debug_msg("Loaded %u MAC mappings", count);
 
     return 0;
 }
@@ -460,8 +424,8 @@ static void destroy_env() {
 
 static int toggle_host_blacklist() {
     int bl = -1;
-    
-    struct bssid_record * ap = ap_lookup(curmac);    
+
+    struct bssid_record * ap = ap_lookup(curmac);
     if (ap) {
         bl = ! ap->ssid.blacklisted;
         ap->ssid.blacklisted = bl;
@@ -472,10 +436,10 @@ static int toggle_host_blacklist() {
             host->blacklisted = bl;
         }
     }
-    
+
     if (bl < 0)
         return -1;
-        
+
     if (bl)
         send_blacklist_command(curmac);
     else
@@ -566,12 +530,12 @@ static int process_setup() {
 
 int main() {
     init_ui();
-    
+
     if(init_env() < 0) {
         end_ui();
         return 1;
     }
-        
+
     debug_msg("Connecting to the server...");
 
     if(server_connect() < 0) {
@@ -579,9 +543,9 @@ int main() {
         end_ui();
         return 1;
     }
-        
+
     debug_msg("Connected!");
-    
+
     if (process_setup() < 0) {
         end_ui();
         return 1;
@@ -589,7 +553,7 @@ int main() {
 
     if (read_names_mapping("hosts.cfg") == 0)
         usleep(1000*600);
-    
+
     fd_set readfds;
     struct timespec timeout = {0};
     FD_ZERO(&readfds);
@@ -598,7 +562,7 @@ int main() {
     while(1) {
         // re-init on each cycle
         FD_SET(serverfd, &readfds);
-            
+
         switch(pselect(serverfd+1, &readfds, NULL, NULL, &timeout, &unblock_mask)) {
             case -1:
                 if (errno != EINTR) {
@@ -649,12 +613,12 @@ int main() {
                 if (FD_ISSET(serverfd, &readfds)) {
                     if (read_model(serverfd) < 0)
                         now_exit(1);
-                    
+
                     wclear(headerw);
                     wprintw(headerw, "Scanned %u APs with %u total hosts", g_slist_length(aps), g_hash_table_size(hosts));
                     mvwprintw(headerw, 0, UI_WINDOW_HEADER_RIGHT, "updated: %s", time_format(time(0)));
                     wrefresh(headerw);
-                    
+
                     ui_restore_selection();
                 }
         }
