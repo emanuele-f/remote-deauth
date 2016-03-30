@@ -56,21 +56,21 @@ static int send_wrbuf(size_t datacount)
     return 0;
 }
 
-/* 
+/*
  * Moves from/to attacking list based on host blacklist status.
  * Updates host blacklist flag.
- * 
+ *
  */
 static void update_attacking_status(const u_char * mac) {
     if (g_slist_find_custom(blacklist, mac, ssid_in_list_fn)) {
         // host is blacklisted
-        
+
         // check if its an host, not an AP
         struct ssid_record * host = (struct ssid_record *) g_hash_table_lookup(hosts, mac);
         if (host) {
             // is an host
             if (! g_slist_find_custom(attacking, mac, ssid_in_list_fn))
-                attacking = g_slist_insert(attacking, (u_char *)mac, 0);
+                attacking = g_slist_insert(attacking, host, 0);
             host->blacklisted = 1;
         } else {
             struct bssid_record * ap = ap_lookup(mac);
@@ -80,7 +80,7 @@ static void update_attacking_status(const u_char * mac) {
         }
     } else {
         // host isn't blacklisted
-        
+
         // check if its an host, not an AP
         struct ssid_record * host = (struct ssid_record *) g_hash_table_lookup(hosts, mac);
         if (host) {
@@ -279,7 +279,7 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
                 fprintf(stderr, "ap_create() error: cannot allocate new host\n");
 
             printf("New bssid: %s\n", bssrec->ssid.ssid_s);
-            
+
             update_attacking_status(bssrec->ssid.ssid);
         }
 
@@ -348,13 +348,13 @@ int host_blacklist(u_char mac[6]) {
 int host_unblacklist(u_char mac[6]) {
     GSList * found = g_slist_find_custom(blacklist, mac, ssid_in_list_fn);
     int rv = -1;
-    
+
     if (found) {
         free(found->data);
         blacklist = g_slist_delete_link(blacklist, found);
         rv = 0;
     }
-    
+
     update_attacking_status(mac);
     return rv;
 }
