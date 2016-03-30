@@ -23,10 +23,8 @@ change channel.
 
 If you have installed the aircrack suite, you can use:
 
-`
-sudo airmon-ng start [iface]
-sudo airodump-ng [mon_iface] -c [channel]
-`
+`sudo airmon-ng start [iface]`
+`sudo airodump-ng [mon_iface] -c [channel]`
 
 Current setup assumes mon0 as the monitor interface device.
 
@@ -34,9 +32,17 @@ client
 ------
 Connects to the server and presents the monitor data in an ncurses interface.
 
-Change selction with arrow keys.
-Press enter on an AP to expand/collapse its hosts list.
-Press spacebar to add/remove host from blacklist
-
 - make client
 - ./client
+
+Change selction with arrow keys.
+Press enter on an AP to expand/collapse its hosts list.
+Press spacebar to add/remove host from blacklist.
+
+You can create a mac -> name mapping file `hosts.cfg` with the format:
+
+`xx:xx:xx:xx:xx:xx alias`
+
+which will be used to tag mac addresses owners in the program.
+
+
