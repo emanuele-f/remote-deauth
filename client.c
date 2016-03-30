@@ -49,6 +49,7 @@ static int serverfd = -1;
 #define UI_WINDOW_HEADER_RIGHT 50
 #define UI_WINDOW_HEADER_TOTH (UI_WINDOW_HEADER_H + UI_WINDOW_PADDING_Y)
 #define UI_WINDOW_HOSTS_TOTH (UI_WINDOW_H - 4 * UI_WINDOW_PADDING_Y - UI_WINDOW_HEADER_TOTH)
+#define UI_WINDOW_HOSTS_RIGHT 55
 
 static WINDOW * mainw = NULL;
 static WINDOW * headerw = NULL;
@@ -109,6 +110,13 @@ static void end_ui() {
     endwin();
 }
 
+#define xprintw(win, x, ...) do{\
+    int _y, _x;\
+    (void)(_x);\
+    getyx(win, _y, _x);\
+    mvwprintw(win, _y, x, ##__VA_ARGS__);\
+}while(0)
+
 static void bssid_iterate_fn(gpointer key, gpointer value, gpointer udata) {
     char * essid = NULL;
 
@@ -119,15 +127,19 @@ static void bssid_iterate_fn(gpointer key, gpointer value, gpointer udata) {
     else
         essid = (char *)rec->essid;
 
-    wprintw(hostsw, "BSSID %s <%s>\n", rec->ssid.ssid_s, essid);
+    wprintw(hostsw, "BSSID %s <%s>", rec->ssid.ssid_s, essid);
+    xprintw(hostsw, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
+    
     for (GSList * item = rec->hosts; item != NULL; item = item->next) {
         const struct ssid_record * host = (const struct ssid_record *) item->data;
 
         const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
+        wprintw(hostsw, "\t%s ", host->ssid_s);
+        
         if (stationame)
-            wprintw(hostsw, "\t%s <%s> (seen %s)\n", host->ssid_s, stationame, time_format(host->lseen));
-        else
-            wprintw(hostsw, "\t%s (seen %s)\n", host->ssid_s, time_format(host->lseen));
+            wprintw(hostsw, "<%s>", stationame);
+            
+        xprintw(hostsw, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
     }
 }
 
