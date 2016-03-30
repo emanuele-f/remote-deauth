@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include "util.h"
+#include "model.h"
 
 static char hex[] = "0123456789ABCDEF";
 static u_char BROADCAST_BSSID[] = "\xFF\xFF\xFF\xFF\xFF\xFF";
@@ -247,4 +248,9 @@ gboolean mac_equal_fn(gconstpointer a, gconstpointer b) {
     const u8 * k2 = (u8 *) b;
 
     return memcmp(k1, k2, 6) == 0;
+}
+
+int ssid_in_list_fn(const void * item, const void * macaddr) {
+    struct ssid_record * host = (struct ssid_record * )item;
+    return memcmp(host->ssid, macaddr, 6);
 }

@@ -36,10 +36,12 @@
 //~ #include "debug.h"
 
 static GHashTable * whois = NULL;   // contains owns MAC -> Name mapping
+static GSList * notexpanded = NULL; // contains onwn MAC: list of not expdanded aps
 static sigset_t unblock_mask;
 static int serverfd = -1;
 static int curline = 0;             // the current selected line
 static int maxlines = 0;            // the lines the viewport lines available
+static u_char curmac[6] = {0};      // the current selected mac
 
 /**********************************************************************/
 #include <ncurses.h>
@@ -122,6 +124,10 @@ static void end_ui() {
     endwin();
 }
 
+static int is_expanded(const u_char * bssid) {
+    return g_slist_find_custom(notexpanded, bssid, ssid_in_list_fn) == NULL;
+}
+
 /*#define xprintw(win, x, ...) do{\
     int _y, _x;\
     (void)(_x);\
@@ -142,36 +148,39 @@ void ui_update_hosts() {
             essid = manualname;
         else
             essid = (char *)rec->essid;
+            
+        int isexpanded =  is_expanded(rec->ssid.ssid);
 
         if (y == curline) {
             wprintw(hostsw, "*");
-        } else {
+        } else if (isexpanded) {
             wprintw(hostsw, "-");
+        } else {
+            wprintw(hostsw, "+");
         }
+        
         wprintw(hostsw, "BSSID %s <%s>", rec->ssid.ssid_s, essid);
         mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
-        maxlines++;
         y++;
         
-        for (GSList * item = rec->hosts; item != NULL; item = item->next) {
-            const struct ssid_record * host = (const struct ssid_record *) item->data;
+        if (isexpanded) {
+            for (GSList * item = rec->hosts; item != NULL; item = item->next) {
+                const struct ssid_record * host = (const struct ssid_record *) item->data;
 
-            const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
-            
-            if (y == curline) {
-                //~ wprintw(hostsw, "*");
-            } else {
-                //~ wprintw(hostsw, "-");
-            }
-            
-            wprintw(hostsw, "\t%s ", host->ssid_s);
-            
-            if (stationame)
-                wprintw(hostsw, "<%s>", stationame);
+                const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
                 
-            mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
-            maxlines++;
-            y++;
+                if (y == curline) {
+                    wprintw(hostsw, "*");
+                }
+                
+                wprintw(hostsw, "\t%s ", host->ssid_s);
+                
+                if (stationame)
+                    wprintw(hostsw, "<%s>", stationame);
+                    
+                mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
+                y++;
+            }
         }
     }
     
@@ -202,6 +211,86 @@ static int send_blacklist_command(u_char * mac) {
 
 static int send_clear_command(u_char * mac) {
     _send_generic_mac_command(mac, CLEAR_CMD_PRE);
+}
+
+/* Saves selected mac based on curline variable */
+static int save_selection() {
+    int l = 0;
+    u_char * found = NULL;
+    
+    for(GSList * aplink = aps; aplink != NULL; aplink=aplink->next) {
+        struct bssid_record * ap = (struct bssid_record *)aplink->data;
+        
+        if (curline == l) {
+            found = ap->ssid.ssid;
+            break;
+        }
+        
+        if (is_expanded(ap->ssid.ssid)) {
+            for (GSList * link = ap->hosts; link != NULL; link=link->next) {
+                l++;
+                
+                if (curline == l) {
+                    found = ((struct ssid_record *)link->data)->ssid;
+                    break;
+                }
+            }
+            
+            if (found)
+                break;
+        }
+        
+        l++;
+    }
+    
+    if (found) {
+        memcpy(curmac, found, 6);
+        return 0;
+    }
+    
+    return -1;
+}
+
+/* 
+ * Restores curline based on selected mac variable.
+ * 
+ * Defaults to 0.
+ * 
+ * Also update maxlines variable
+ * 
+ */
+static int restore_selection() {
+    int l = 0;
+    int found = -1;
+    
+    for(GSList * aplink = aps; aplink != NULL; aplink=aplink->next) {
+        struct bssid_record * ap = (struct bssid_record *)aplink->data;
+        
+        if(memcmp(ap->ssid.ssid, curmac, 6) == 0)
+            found = l;
+        
+        if (is_expanded(ap->ssid.ssid)) {
+            for (GSList * link = ap->hosts; link != NULL; link=link->next) {
+                struct ssid_record * host = (struct ssid_record *)link->data;
+                l++;
+                
+                if (memcmp(host->ssid, curmac, 6) == 0)
+                    found = l;
+            }
+        }
+        
+        l++;
+    }
+    
+    maxlines = l;
+    
+    if (found >= 0) {
+        curline = found;
+        return 0;
+    } else {
+        curline = 0;
+        return -1;
+    }
 }
 
 static int read_names_mapping(const char * fname) {
@@ -423,12 +512,26 @@ int main() {
                         case KEY_UP:
                             if (curline > 0) {
                                 curline--;
+                                save_selection();
+                                
+                                //TODO DEBUG
+                                char m[MAC_ADDRESS_CHAR_SIZE];
+                                etheraddr_string(curmac, m);
+                                debug_msg("MAC: %s", m);
+                                
                                 ui_update_hosts();
                             }
                             break;
                         case KEY_DOWN:
                             if (curline < maxlines-1) {
                                 curline++;
+                                save_selection();
+                                
+                                //TODO DEBUG
+                                char m[MAC_ADDRESS_CHAR_SIZE];
+                                etheraddr_string(curmac, m);
+                                debug_msg("MAC: %s", m);
+                                
                                 ui_update_hosts();
                             }
                             break;
@@ -446,6 +549,8 @@ int main() {
                     if (read_model(serverfd) < 0)
                         now_exit(1);
                         
+                    restore_selection();
+                    
                     wclear(headerw);
                     wprintw(headerw, "Scanned 3 APs with 10 total hosts");
                     mvwprintw(headerw, 0, UI_WINDOW_HEADER_RIGHT, "updated: %s", time_format(time(0)));

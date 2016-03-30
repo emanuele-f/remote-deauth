@@ -56,11 +56,6 @@ static int send_wrbuf(size_t datacount)
     return 0;
 }
 
-static int ssid_in_list_fn(const void * item, const void * macaddr) {
-    struct ssid_record * host = (struct ssid_record * )item;
-    return memcmp(host->ssid, macaddr, 6);
-}
-
 /**************************************************************************/
 
 GSList * blacklist = NULL;
