@@ -234,7 +234,7 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
     time_t now = time(0);
 
     if (bssid) {
-        struct bssid_record *  bssrec = g_hash_table_lookup(aps, bssid);
+        struct bssid_record *  bssrec = ap_lookup(bssid);
         if (! bssrec) {
             bssrec = ap_create(bssid);
             bssrec->ssid.fseen = now;

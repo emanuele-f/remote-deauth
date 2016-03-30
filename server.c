@@ -100,7 +100,7 @@ static inline int process_setup() {
 
 static int handle_client_connection() {
     struct sockaddr_in cli_addr;
-    size_t clsize = sizeof(cli_addr);
+    socklen_t clsize = sizeof(cli_addr);
 
     int newsock = accept(sockfd, (struct sockaddr *) &cli_addr, &clsize);
     const char *ip = inet_ntoa(cli_addr.sin_addr);

@@ -24,29 +24,6 @@
 #include "util.h"
 #include "model.h"
 
-static void bssid_iterate_print_fn(gpointer key, gpointer value, gpointer udata) {
-    GHashTable * whois = (GHashTable *)udata;
-    char * essid = NULL;
-
-    struct bssid_record * rec = (struct bssid_record *)value;
-    char * manualname = (char *) g_hash_table_lookup(whois, rec->ssid.ssid);
-    if (manualname)
-        essid = manualname;
-    else
-        essid = (char *)rec->essid;
-
-    printf("BSSID %s <%s>\n", rec->ssid.ssid_s, essid);
-    for (GSList * item = rec->hosts; item != NULL; item = item->next) {
-        const struct ssid_record * host = (const struct ssid_record *) item->data;
-
-        const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
-        if (stationame)
-            printf("\t%s <%s> (seen %s)\n", host->ssid_s, stationame, time_format(host->lseen));
-        else
-            printf("\t%s (seen %s)\n", host->ssid_s, time_format(host->lseen));
-    }
-}
-
 /**************************************************************************/
 
 void print_wlan_header(const struct ieee80211_hdr * data,
@@ -183,8 +160,30 @@ void hex_dump(const char *desc, const void *addr, int len) {
     printf ("  %s\n", buff);
 }
 
-void debug_print_bssids(const GHashTable * aps, const GHashTable * whois) {
+void debug_print_bssids(const GSList * aps, const GHashTable * whois) {
     printf("\n---Report\n");
-    g_hash_table_foreach((GHashTable *)aps, bssid_iterate_print_fn, (GHashTable *)whois);
+    
+    for (GSList * link = (GSList *)aps; link != NULL; link=link->next) {
+        char * essid = NULL;
+
+        struct bssid_record * rec = (struct bssid_record *)link->data;
+        char * manualname = (char *) g_hash_table_lookup((GHashTable *)whois, rec->ssid.ssid);
+        if (manualname)
+            essid = manualname;
+        else
+            essid = (char *)rec->essid;
+
+        printf("BSSID %s <%s>\n", rec->ssid.ssid_s, essid);
+        for (GSList * item = rec->hosts; item != NULL; item = item->next) {
+            const struct ssid_record * host = (const struct ssid_record *) item->data;
+
+            const char * stationame = (char *) g_hash_table_lookup((GHashTable *)whois, host->ssid);
+            if (stationame)
+                printf("\t%s <%s> (seen %s)\n", host->ssid_s, stationame, time_format(host->lseen));
+            else
+                printf("\t%s (seen %s)\n", host->ssid_s, time_format(host->lseen));
+        }
+    }
+    
     printf("---\n");
 }

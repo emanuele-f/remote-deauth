@@ -35,11 +35,11 @@
 
 //~ #include "debug.h"
 
-static GHashTable * whois = NULL;  // contains owns MAC -> Name mapping
+static GHashTable * whois = NULL;   // contains owns MAC -> Name mapping
 static sigset_t unblock_mask;
 static int serverfd = -1;
-static int curline = 0;
-static int maxlines = 10;
+static int curline = 0;             // the current selected line
+static int maxlines = 0;            // the lines the viewport lines available
 
 /**********************************************************************/
 #include <ncurses.h>
@@ -129,51 +129,52 @@ static void end_ui() {
     mvwprintw(win, _y, x, ##__VA_ARGS__);\
 }while(0)*/
 
-static void bssid_iterate_fn(gpointer key, gpointer value, gpointer udata) {
-    char * essid = NULL;
-    int x, y;
-    (void)x;
-    getyx(hostsw, y, x);
-
-    struct bssid_record * rec = (struct bssid_record *)value;
-    char * manualname = (char *) g_hash_table_lookup(whois, rec->ssid.ssid);
-    if (manualname)
-        essid = manualname;
-    else
-        essid = (char *)rec->essid;
-
-    if (y == curline) {
-        wprintw(hostsw, "*");
-    } else {
-        wprintw(hostsw, "-");
-    }
-    wprintw(hostsw, "BSSID %s <%s>", rec->ssid.ssid_s, essid);
-    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
-    
-    for (GSList * item = rec->hosts; item != NULL; item = item->next) {
-        const struct ssid_record * host = (const struct ssid_record *) item->data;
-        y++;
-
-        const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
-        
-        if (y == curline) {
-            //~ wprintw(hostsw, "*");
-        } else {
-            //~ wprintw(hostsw, "-");
-        }
-        
-        wprintw(hostsw, "\t%s ", host->ssid_s);
-        
-        if (stationame)
-            wprintw(hostsw, "<%s>", stationame);
-            
-        mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
-    }
-}
-
 void ui_update_hosts() {
+    int y = 0;
+    
     wclear(hostsw);
-    g_hash_table_foreach((GHashTable *)aps, bssid_iterate_fn, NULL);
+    
+    for (GSList * link = aps; link != NULL; link=link->next) {
+        char * essid = NULL;
+        struct bssid_record * rec = (struct bssid_record *)link->data;
+        char * manualname = (char *) g_hash_table_lookup(whois, rec->ssid.ssid);
+        if (manualname)
+            essid = manualname;
+        else
+            essid = (char *)rec->essid;
+
+        if (y == curline) {
+            wprintw(hostsw, "*");
+        } else {
+            wprintw(hostsw, "-");
+        }
+        wprintw(hostsw, "BSSID %s <%s>", rec->ssid.ssid_s, essid);
+        mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
+        maxlines++;
+        y++;
+        
+        for (GSList * item = rec->hosts; item != NULL; item = item->next) {
+            const struct ssid_record * host = (const struct ssid_record *) item->data;
+
+            const char * stationame = (char *) g_hash_table_lookup(whois, host->ssid);
+            
+            if (y == curline) {
+                //~ wprintw(hostsw, "*");
+            } else {
+                //~ wprintw(hostsw, "-");
+            }
+            
+            wprintw(hostsw, "\t%s ", host->ssid_s);
+            
+            if (stationame)
+                wprintw(hostsw, "<%s>", stationame);
+                
+            mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
+            maxlines++;
+            y++;
+        }
+    }
+    
     wrefresh(hostsw);
 }
 
@@ -276,9 +277,6 @@ static int init_env() {
 
     whois = g_hash_table_new_full(mac_hash_fn, mac_equal_fn, free_fn, free_fn);
     if (whois == NULL) {
-        g_hash_table_destroy(aps);
-        g_hash_table_destroy(hosts);
-        aps = NULL;
         error_msg("Cannot allocate whois memory");
         return -1;
     }

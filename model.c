@@ -24,7 +24,7 @@
 #include "model.h"
 #include "util.h"
 
-GHashTable * aps = NULL;
+GSList * aps = NULL;
 GHashTable * hosts = NULL;
 
 static void ap_destroy_fn(void * rec) {
@@ -34,39 +34,36 @@ static void ap_destroy_fn(void * rec) {
     free(host);
 }
 
-static void send_iterate_fn(gpointer key, gpointer value, gpointer udata) {
-    //~ const u_char * mac = (u_char *) key;
-    const int sock = (int) udata;
-    const struct bssid_record * ap = (struct bssid_record *) value;
-
-    // AP ssid
-    if (write_checked(sock, &(ap->ssid), sizeof(struct ssid_record)) < 0)
-        return;
-
-    // AP essid
-    if (write_checked(sock, ap->essid, SSID_MAX_SIZE) < 0)
-        return;
-
-    // 4 bytes: number of hosts
-    const le32 nhosts = g_slist_length(ap->hosts);
-    if (write_checked(sock, &nhosts, sizeof(nhosts)) < 0)
-        return;
-
-    for (GSList * i=ap->hosts; i!=NULL; i = i->next) {
-        const struct ssid_record * host = (struct ssid_record *) i->data;
-
-        if (write_checked(sock, host, sizeof(struct ssid_record)) < 0)
-            return;
-    }
-}
-
-static inline int send_client_data(int fd) {
+static inline int send_client_data(int sock) {
     // 4 bytes: number of APs
-    const le32 naps = g_hash_table_size(aps);
-    if (write_checked(fd, &naps, sizeof(naps)) < 0)
+    const le32 naps = g_slist_length(aps);
+    if (write_checked(sock, &naps, sizeof(naps)) < 0)
         return -1;
 
-    g_hash_table_foreach(aps, send_iterate_fn, (gpointer)fd);
+    for (GSList * link = aps; link != NULL; link = link->next) {
+        const struct bssid_record * ap = (struct bssid_record *) link->data;
+
+        // AP ssid
+        if (write_checked(sock, &(ap->ssid), sizeof(struct ssid_record)) < 0)
+            return -1;
+
+        // AP essid
+        if (write_checked(sock, ap->essid, SSID_MAX_SIZE) < 0)
+            return -1;
+
+        // 4 bytes: number of hosts
+        const le32 nhosts = g_slist_length(ap->hosts);
+        if (write_checked(sock, &nhosts, sizeof(nhosts)) < 0)
+            return -1;
+
+        for (GSList * i=ap->hosts; i!=NULL; i = i->next) {
+            const struct ssid_record * host = (struct ssid_record *) i->data;
+
+            if (write_checked(sock, host, sizeof(struct ssid_record)) < 0)
+                return -1;
+        }
+    }
+    
     return 0;
 }
 
@@ -115,6 +112,18 @@ static inline int read_server_data(int fd) {
     return 0;
 }
 
+static int bssid_in_list_fn(const void * item, const void * macaddr) {
+    struct bssid_record * host = (struct bssid_record * )item;
+    return memcmp(host->ssid.ssid, macaddr, 6);
+}
+
+struct bssid_record * ap_lookup(const u_char * bssid) {
+    GSList * link = g_slist_find_custom(aps, bssid, bssid_in_list_fn);
+    if (! link)
+        return NULL;
+    return (struct bssid_record *) link->data;
+}
+
 /**************************************************************************/
 
 struct ssid_record * host_create(const u_char * mac) {
@@ -146,7 +155,7 @@ int host_destroy(struct ssid_record * host) {
 }*/
 
 struct bssid_record * ap_create(const u_char * bssid) {
-    if (g_hash_table_contains(aps, bssid))
+    if (g_slist_find_custom(aps, bssid, bssid_in_list_fn) != NULL)
         return NULL;
 
     struct bssid_record * rec = (struct bssid_record *)calloc(sizeof(struct bssid_record), 1);
@@ -154,21 +163,21 @@ struct bssid_record * ap_create(const u_char * bssid) {
     etheraddr_string(rec->ssid.ssid, (char *)rec->ssid.ssid_s);
     rec->hosts = NULL;
 
-    g_hash_table_insert(aps, rec->ssid.ssid, rec);
+    aps = g_slist_append(aps, rec);
     return rec;
 }
 
 int ap_add_host(const u_char * bssid, const struct ssid_record * host) {
-   struct bssid_record * ap = g_hash_table_lookup(aps, bssid);
+    struct bssid_record * ap = ap_lookup(bssid);
     if (! ap)
         return -1;
-
+    
     ap->hosts = g_slist_append(ap->hosts, (void *) host);
     return 0;
 }
 
 int ap_remove_host(const u_char * bssid, const struct ssid_record * host) {
-    struct bssid_record * ap = g_hash_table_lookup(aps, bssid);
+    struct bssid_record * ap = ap_lookup(bssid);
     if (! ap)
         return -1;
 
@@ -177,15 +186,8 @@ int ap_remove_host(const u_char * bssid, const struct ssid_record * host) {
 }
 
 int init_model() {
-    aps = g_hash_table_new_full(mac_hash_fn, mac_equal_fn, NULL, ap_destroy_fn);
-    if (aps == NULL) {
-        fprintf(stderr, "Cannot allocate aps memory\n");
-        return -1;
-    }
-
     hosts = g_hash_table_new_full(mac_hash_fn, mac_equal_fn, NULL, free_fn);
     if (hosts == NULL) {
-        g_hash_table_destroy(aps);
         fprintf(stderr, "Cannot allocate hosts memory\n");
         return -1;
     }
@@ -194,8 +196,8 @@ int init_model() {
 }
 
 int destroy_model() {
-    g_hash_table_destroy(aps);          // frees values(aps)
-    g_hash_table_destroy(hosts);        // frees values(hosts)
+    g_slist_free_full(aps, ap_destroy_fn);      // frees values(aps)
+    g_hash_table_destroy(hosts);                // frees values(hosts)
     aps = NULL;
     hosts = NULL;
 

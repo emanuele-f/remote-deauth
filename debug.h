@@ -27,6 +27,6 @@
 
 void print_wlan_header(const struct ieee80211_hdr * data, size_t size, const struct ieee802_11_elems * elems);
 void hex_dump(const char *desc, const void *addr, int len);
-void debug_print_bssids(const GHashTable * aps, const GHashTable * whois);
+void debug_print_bssids(const GSList * aps, const GHashTable * whois);
 
 #endif

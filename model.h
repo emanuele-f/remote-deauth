@@ -51,11 +51,12 @@ struct bssid_record {
     GSList * hosts; // ssid_record list
 };
 
-extern GHashTable * aps;    // contains owned AP Bssid information
+extern GSList * aps;        // contains owned AP Bssid information
 extern GHashTable * hosts;  // contains owned station information
 
 struct ssid_record * host_create(const u_char * mac);
 struct bssid_record * ap_create(const u_char * bssid);
+struct bssid_record * ap_lookup(const u_char * bssid);
 int ap_add_host(const u_char * bssid, const struct ssid_record * host);
 int ap_remove_host(const u_char * bssid, const struct ssid_record * host);
 
