@@ -56,6 +56,48 @@ static int send_wrbuf(size_t datacount)
     return 0;
 }
 
+/* 
+ * Moves from/to attacking list based on host blacklist status.
+ * Updates host blacklist flag.
+ * 
+ */
+static void update_attacking_status(const u_char * mac) {
+    if (g_slist_find_custom(blacklist, mac, ssid_in_list_fn)) {
+        // host is blacklisted
+        
+        // check if its an host, not an AP
+        struct ssid_record * host = (struct ssid_record *) g_hash_table_lookup(hosts, mac);
+        if (host) {
+            // is an host
+            if (! g_slist_find_custom(attacking, mac, ssid_in_list_fn))
+                attacking = g_slist_insert(attacking, (u_char *)mac, 0);
+            host->blacklisted = 1;
+        } else {
+            struct bssid_record * ap = ap_lookup(mac);
+            if (ap)
+                // is an AP
+                ap->ssid.blacklisted = 1;
+        }
+    } else {
+        // host isn't blacklisted
+        
+        // check if its an host, not an AP
+        struct ssid_record * host = (struct ssid_record *) g_hash_table_lookup(hosts, mac);
+        if (host) {
+            // is an host
+            GSList * atlink = g_slist_find_custom(attacking, mac, ssid_in_list_fn);
+            if (atlink)
+                attacking = g_slist_delete_link(attacking, atlink);
+            host->blacklisted = 0;
+        } else {
+            struct bssid_record * ap = ap_lookup(mac);
+            if (ap)
+                // is an AP
+                ap->ssid.blacklisted = 0;
+        }
+    }
+}
+
 /**************************************************************************/
 
 GSList * blacklist = NULL;
@@ -237,6 +279,8 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
                 fprintf(stderr, "ap_create() error: cannot allocate new host\n");
 
             printf("New bssid: %s\n", bssrec->ssid.ssid_s);
+            
+            update_attacking_status(bssrec->ssid.ssid);
         }
 
         // is a beacon frame?
@@ -278,17 +322,7 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
             memcpy(host->assoc, bssid, 6);
             ap_add_host(host->assoc, host);
 
-            int toattack = 0;
-            if (g_slist_find_custom(blacklist, host->ssid, ssid_in_list_fn))
-                toattack = 1;
-            else if (g_slist_find_custom(blacklist, bssid, ssid_in_list_fn))
-                toattack = 1;
-            int inlist = g_slist_find(attacking, host) != NULL;
-
-            if (toattack && !inlist)
-                attacking = g_slist_insert(attacking, host, 0);
-            else if (!toattack && inlist)
-                attacking = g_slist_remove(attacking, host);
+            update_attacking_status(host->ssid);
         }
 
         host->lseen = now;
@@ -296,38 +330,31 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
     }
 }
 
-int host_blacklist(u_char host[6]) {
-    GSList * found = g_slist_find_custom(blacklist, host, ssid_in_list_fn);
+int host_blacklist(u_char mac[6]) {
+    GSList * found = g_slist_find_custom(blacklist, mac, ssid_in_list_fn);
+    int rv = -1;
 
-    if (found)
-        return -1;
-
-    u_char * mac = (u_char *) malloc(6);
-    memcpy(mac, host, 6);
-    blacklist = g_slist_append(blacklist, mac);
-
-    // check if it must be attacked now
-    if (! g_slist_find_custom(attacking, mac, ssid_in_list_fn)) {
-        struct ssid_record * rec = (struct ssid_record *) g_hash_table_lookup(hosts, mac);
-
-        if (rec)
-            attacking = g_slist_insert(attacking, mac, 0);
+    if (! found) {
+        u_char * ownmac = (u_char *) malloc(6);
+        memcpy(ownmac, mac, 6);
+        blacklist = g_slist_append(blacklist, ownmac);
+        rv = 0;
     }
 
-    return 0;
+    update_attacking_status(mac);
+    return rv;
 }
 
-int host_unblacklist(u_char host[6]) {
-    GSList * link = g_slist_find_custom(blacklist, host, ssid_in_list_fn);
-    if (! link)
-        return -1;
-
-    free(link->data);
-    blacklist = g_slist_delete_link(blacklist, link);
-
-    // check if it's being attacked
-    GSList * atlink = g_slist_find_custom(attacking, host, ssid_in_list_fn);
-    if (atlink)
-        attacking = g_slist_delete_link(attacking, atlink);
-    return 0;
+int host_unblacklist(u_char mac[6]) {
+    GSList * found = g_slist_find_custom(blacklist, mac, ssid_in_list_fn);
+    int rv = -1;
+    
+    if (found) {
+        free(found->data);
+        blacklist = g_slist_delete_link(blacklist, found);
+        rv = 0;
+    }
+    
+    update_attacking_status(mac);
+    return rv;
 }

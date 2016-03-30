@@ -38,6 +38,7 @@ struct ssid_record {
     u_char ssid[6];
     u_char assoc[6];
     char ssid_s[MAC_ADDRESS_CHAR_SIZE];
+    u8 blacklisted;       // 1: if host its currently blacklisted
 
     le32 fseen;           // first seen
     le32 lseen;           // last seen
