@@ -198,8 +198,8 @@ void ui_update_hosts() {
             wattron(hostsw, COLOR_PAIR(palette));
             wprintw(hostsw, "%s", rec->ssid.ssid_s);
             wattroff(hostsw, COLOR_PAIR(palette));
-            if (essid)
-                wprintw(hostsw, " <%s>", essid);
+            if (essid[0])
+                wprintw(hostsw, " %s", essid);
             wprintw(hostsw, " [%u]", g_slist_length(rec->hosts));
             mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
             
@@ -233,7 +233,7 @@ void ui_update_hosts() {
                     wattroff(hostsw, COLOR_PAIR(palette));    
                     
                     if (stationame)
-                        wprintw(hostsw, " <%s>", stationame);
+                        wprintw(hostsw, " %s", stationame);
                     
                     mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
                     y++;
@@ -651,7 +651,7 @@ int main() {
                         now_exit(1);
                     
                     wclear(headerw);
-                    wprintw(headerw, "Scanned 3 APs with 10 total hosts");
+                    wprintw(headerw, "Scanned %u APs with %u total hosts", g_slist_length(aps), g_hash_table_size(hosts));
                     mvwprintw(headerw, 0, UI_WINDOW_HEADER_RIGHT, "updated: %s", time_format(time(0)));
                     wrefresh(headerw);
                     
