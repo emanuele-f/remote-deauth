@@ -322,7 +322,11 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
             memcpy(host->assoc, bssid, 6);
             ap_add_host(host->assoc, host);
 
-            update_attacking_status(host->ssid);
+            //TODO restructure ap blacklist stuff with possible host removal in mind
+            if (g_slist_find_custom(blacklist, host->assoc, ssid_in_list_fn))
+                host_blacklist(host->ssid);
+            else
+                update_attacking_status(host->ssid);
         }
 
         host->lseen = now;
@@ -339,6 +343,15 @@ int host_blacklist(u_char mac[6]) {
         memcpy(ownmac, mac, 6);
         blacklist = g_slist_append(blacklist, ownmac);
         rv = 0;
+
+        // if it's an AP, also blacklist current clients
+        struct bssid_record * ap = ap_lookup(mac);
+        if (ap) {
+            for (GSList * link = ap->hosts; link; link = link->next) {
+                struct ssid_record * host = (struct ssid_record *)link->data;
+                host_blacklist(host->ssid);
+            }
+        }
     }
 
     update_attacking_status(mac);
