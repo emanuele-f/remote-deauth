@@ -98,6 +98,104 @@ static void update_attacking_status(const u_char * mac) {
     }
 }
 
+/* Analize a packet deeply to gain more information */
+static void analize_packet(const struct ieee80211_hdr * header, size_t len) {
+    if (WLAN_FC_GET_TYPE(header->frame_control) == WLAN_FC_TYPE_DATA) {
+        size_t skip = -1;
+
+        // has a QOS flag on
+        if (WLAN_FC_GET_STYPE(header->frame_control) == WLAN_FC_STYPE_QOS_DATA) {
+            skip = 34;
+        // has a QOS flag off
+        } else if (WLAN_FC_GET_STYPE(header->frame_control) == WLAN_FC_STYPE_DATA) {
+            skip = 32;
+        }
+
+        // not interested
+        if (skip == -1)
+            return;
+
+        const size_t llclen = len - skip - 4; // 4 is 802.11 FCS trailer
+        const u_char * llcbuf = (u_char *)header + skip;
+        const u8 llchlen = 8;
+
+        if (llclen < llchlen)
+            return;
+
+        const be16 netproto = be_to_host16(*(u16 *)(llcbuf+6));
+        const size_t netlen = llclen - llchlen;
+
+        // ipv4 protocol
+        if (netproto ==  0x0800 && netlen >= 20) {
+            const u_char * ip4buf = llcbuf + llchlen;
+            const u8 ip4hlen = (ip4buf[0] & 0x0F) * 4;
+            const size_t ip4len = netlen - ip4hlen;
+            //~ const be16 ip4len = be_to_host16(*(u16 *)(ip4buf+2)) - ip4hlen;
+
+            if (ip4buf[9] == 0x11 && ip4len >= 8) {
+                // Udp packet
+                const u_char * udpbuf = ip4buf + ip4hlen;
+                const size_t udplen = ip4len - 8;
+                //~ const be16 udplen = be_to_host16(*(u16 *)(udpbuf + 4));
+
+                const be16 srcport = be_to_host16(*(u16 *)(udpbuf + 0));
+                const be16 dstport = be_to_host16(*(u16 *)(udpbuf + 2));
+
+                // bootp client -> bootp server
+                if (srcport == 68 && dstport == 67) {
+                    const u_char * bootbuf = udpbuf + 8;
+
+                    // OpCode == Boot Request
+                    if (bootbuf[0] == 0x01 && udplen > 236) {
+                        const u_char * vendorbuf = bootbuf + 236;
+                        const size_t vendorlen = udplen - 236;
+
+                        if (vendorlen < 64)
+                            return;
+
+                        const be32 vendcode = be_to_host32(*(u32 *)(vendorbuf + 0));
+                        // vendor == DHCP magic cookie - rfc1533
+                        if (vendcode == 0x63825363) {
+                            // read the options
+                            size_t i = 4;
+                            while (i < vendorlen) {
+                                const u8 bootopt = vendorbuf[i];
+
+                                // END option
+                                if (bootopt == 255)
+                                    break;
+
+                                // PAD option
+                                if (bootopt == 0) {
+                                    i += 1;
+                                } else {
+                                    const u8 optlen = vendorbuf[i+1];
+
+                                    // Hostname Option
+                                    if (bootopt == 12) {
+                                        hex_dump("Got and interesting packet:", vendorbuf+i+2, optlen);
+                                        hex_dump("Got and interesting packet:", header, len);
+
+                                        struct ssid_record * host = g_hash_table_lookup(hosts, header->addr3);
+                                        if (host) {
+                                            const size_t copysize = min(optlen, HOST_NAME_MAX_SIZE-1);
+                                            memcpy(host->hostname_s, vendorbuf+i+2, copysize);
+                                            host->hostname_s[copysize] = '\0';
+                                        }
+                                        break;
+                                    }
+
+                                    i += optlen + 2;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**************************************************************************/
 
 GSList * blacklist = NULL;
@@ -332,6 +430,8 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
         host->lseen = now;
         //~ debug_print_bssids(aps, whois);
     }
+
+    analize_packet(header, len);
 }
 
 int host_blacklist(u_char mac[6]) {

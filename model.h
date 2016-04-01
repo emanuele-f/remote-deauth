@@ -32,12 +32,14 @@
 #include "ieee802_11/common.h"
 
 #define MAC_ADDRESS_CHAR_SIZE (17+1)
+#define HOST_NAME_MAX_SIZE (31+1)
 #define SSID_MAX_SIZE (31+1)
 
 struct ssid_record {
     u_char ssid[6];
     u_char assoc[6];
     char ssid_s[MAC_ADDRESS_CHAR_SIZE];
+    char hostname_s[HOST_NAME_MAX_SIZE];
     u8 blacklisted;       // 1: if host its currently blacklisted
 
     le32 fseen;           // first seen
