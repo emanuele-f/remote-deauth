@@ -48,12 +48,12 @@ extern const u_char NULL_MAC[6];
     "\xC0\x00\x3A\x01\xCC\xCC\xCC\xCC\xCC\xCC\xBB\xBB\xBB\xBB\xBB\xBB" \
     "\xBB\xBB\xBB\xBB\xBB\xBB\x00\x00\x07\x00"*/
 
-int read_packet(const u_char ** dataptr);
+int read_packet(const u_char ** dataptr, size_t * len);
 int init_internals(const char * ifname);
 int destroy_internals();
 
 void perform_attack();
-void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr * h);
+void pckdata_handler(const u_char * radiodata, size_t radiolen);
 
 int host_blacklist(u_char host[6]);
 int host_unblacklist(u_char host[6]);

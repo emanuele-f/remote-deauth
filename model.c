@@ -49,6 +49,10 @@ static inline int send_client_data(int sock) {
         if (write_checked(sock, &(ap->ssid), sizeof(struct ssid_record)) < 0)
             return -1;
 
+        // AP channel
+        if (write_checked(sock, &(ap->channel), 1) < 0)
+            return -1;
+
         // AP essid
         if (write_checked(sock, ap->essid, SSID_MAX_SIZE) < 0)
             return -1;
@@ -85,17 +89,17 @@ static inline int read_server_data(int fd) {
     struct ssid_record ap;
     for (uint i=0; i<naps; i++) {
         // AP info
-        char essid[SSID_MAX_SIZE] = {0};
-
         if (read_checked(fd, &ap, sizeof(ap)) <= 0)
-            return -1;
-
-        if (read_checked(fd, essid, SSID_MAX_SIZE) < 0)
             return -1;
 
         struct bssid_record * newap = ap_create(ap.ssid);
         newap->ssid = ap;
-        memcpy(newap->essid, essid, SSID_MAX_SIZE);
+
+        if (read_checked(fd, &(newap->channel), 1) < 0)
+            return -1;
+
+        if (read_checked(fd, newap->essid, SSID_MAX_SIZE) < 0)
+            return -1;
 
         le32 nhosts;
         if (read_checked(fd, &nhosts, sizeof(nhosts)) <= 0)

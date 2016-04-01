@@ -230,6 +230,40 @@ ssize_t read_line(int fd, void *buffer, size_t n) {
     return totRead;
 }
 
+uint8_t get_channel(uint16_t frequency) {
+	switch(frequency){
+		case 2412:
+			return 1;
+		case 2417:
+			return 2;
+		case 2422:
+			return 3;
+		case 2427:
+			return 4;
+		case 2432:
+			return 5;
+		case 2437:
+			return 6;
+		case 2442:
+			return 7;
+		case 2447:
+			return 8;
+		case 2452:
+			return 9;
+		case 2457:
+			return 10;
+		case 2462:
+			return 11;
+		case 2467:
+			return 12;
+		case 2472:
+			return 13;
+		case 2484:
+			return 14;
+	}
+	return 0;
+}
+
 /**************************************************************************/
 
 void free_fn(void * item) {

@@ -51,6 +51,7 @@ struct ssid_record {
 struct bssid_record {
     struct ssid_record ssid;
     char essid[SSID_MAX_SIZE];
+    u8 channel;
 
     GSList * hosts; // ssid_record list
 };

@@ -226,12 +226,11 @@ static void main_loop() {
                 break;
             default:
                 if (FD_ISSET(capfd, &readfds)) {
-                    struct pcap_pkthdr h;
                     const u_char * data;
-                    const size_t datalen = read_packet(&data);
+                    size_t datalen;
 
-                    if (datalen > 0)
-                        pckdata_handler(data, datalen, &h);
+                    if (read_packet(&data, &datalen) != -1)
+                        pckdata_handler(data, datalen);
                 }
                 if (FD_ISSET(sockfd, &readfds)) {
                     handle_client_connection();

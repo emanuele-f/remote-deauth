@@ -47,6 +47,7 @@ void free_fn(void * item);
 size_t write_checked(int clsock, const void * data, size_t size);
 size_t read_checked(int fd, void * out, size_t bytes);
 ssize_t read_line(int fd, void *buffer, size_t n);
+uint8_t get_channel(uint16_t frequency);
 
 int ssid_in_list_fn(const void * item, const void * macaddr);
 guint mac_hash_fn(gconstpointer key);

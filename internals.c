@@ -31,6 +31,7 @@
 
 // Buffer used for reads; contains the radiotap header
 static u_char h80211_rdbuf[BUF_LEN];
+
 // Buffer used for writes
 static u_char h80211_wrbuf_headed[BUF_LEN];
 // Offset in h80211_buffer for writes; excludes the radiotap header
@@ -234,13 +235,11 @@ int destroy_internals() {
 }
 
 /* Reads a packet from the capture capdevice into h80211_rdbuf.
- *  Returns -1 on error;
- *  Returns 0 on timeout or 0 read;
- *  Returns >0 number of data (not radiotap) bytes read and sets dataptr to
- *    point to the data (skips radiotap headers)
+ *  Returns -1 if read failed;
+ *  Returns 0 on success;
  *
  */
-int read_packet(const u_char ** dataptr) {
+int read_packet(const u_char ** dataptr, size_t * len) {
     //fprintf(stderr, "READing %u bytes\n", count);
     struct pcap_pkthdr * h;
     const u_char * data;
@@ -251,13 +250,13 @@ int read_packet(const u_char ** dataptr) {
             break;
         case 0:
             //~ fprintf(stderr, "Timeout\n");
-            return 0;
+            return -1;
         case -1:
             pcap_perror(capdev, "Error while reading the packet");
             return -1;
         case -2:
             fprintf(stderr, "Savefile end\n");
-            return 0;
+            return -1;
         default:
             fprintf(stderr, "Unknown error\n");
             return -1;
@@ -265,7 +264,7 @@ int read_packet(const u_char ** dataptr) {
 
     if (h->caplen < 0x0c || ((u_int16_t)data[0] != 0x0000)) {
         //~ fprintf(stderr, "Radiotap header not found or unknown version\n");
-        return 0;
+        return -1;
     }
 
     if (h->caplen > BUF_LEN) {
@@ -275,11 +274,9 @@ int read_packet(const u_char ** dataptr) {
 
     memcpy(h80211_rdbuf, data, h->caplen);
 
-    const u_char radiolen = data[2];
-    const size_t datalen = h->caplen - radiolen;
-
-    *dataptr = h80211_rdbuf + radiolen;
-    return datalen;
+    *dataptr = h80211_rdbuf;
+    *len = h->caplen;
+    return 0;
 }
 
 /* Sends DEAUTH_DIRECTED packets, to the station then to the host, foreach attacking host */
@@ -342,7 +339,12 @@ void perform_attack() {
     }
 }
 
-void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr * h) {
+/* Receives a radiotap header as 'data' */
+void pckdata_handler(const u_char * radiodata, size_t radiolen) {
+    const size_t hlen = le_to_host16(*(u16 *)(radiodata + 2));
+    const size_t len = radiolen - hlen;
+    const u_char * data = radiodata + hlen;
+
     //~ printf("Got packet: %u bytes\n", len);
 
     const u_char * bssid;
@@ -392,6 +394,31 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
             }
         }
 
+        // radiotap: requires that all fields in the radiotap header are aligned to natural boundaries
+        uint32_t it_present = le_to_host32(*(u32*)(radiodata + 4));
+        if (it_present & 0x0008) {
+            // channel is present
+
+            size_t nextbyte;
+
+            if(it_present & 0x80000000)         // Extended bitmap (4 bytes)
+                nextbyte = 12;
+            else
+                nextbyte = 8;
+
+            if (it_present & 0x1)               // TSFT (8 bytes)
+                nextbyte += nextbyte % 8 + 8;
+
+            nextbyte += ((it_present & 0x2) && 1);   // FLAGS 1 byte
+            nextbyte += ((it_present & 0x4) && 1);   // RATE: 1 byte
+
+            const le16 freq = le_to_host16(*(u16 *)(radiodata + nextbyte + nextbyte % 2));
+            const uint8_t ch = get_channel(freq);
+            if (ch != -1)
+                bssrec->channel = ch;
+            //~ printf("%u %x %d\n", nextbyte, freq, get_channel(freq));
+        }
+
         // TODO only set this if AP is the transmitter
         bssrec->ssid.lseen = now;
     }
@@ -428,6 +455,7 @@ void pckdata_handler(const u_char * data, size_t len, const struct pcap_pkthdr *
         //~ debug_print_bssids(aps, whois);
     }
 
+    // ieee-801.11
     analize_packet(header, len);
 }
 
