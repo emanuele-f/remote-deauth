@@ -234,6 +234,8 @@ void ui_update_hosts() {
 
                     if (stationame)
                         wprintw(hostsw, " %s", stationame);
+                    else if (host->hostname_s)
+                        wprintw(hostsw, " %s", host->hostname_s);
 
                     mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
                     y++;
