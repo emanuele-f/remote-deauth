@@ -173,9 +173,6 @@ static void analize_packet(const struct ieee80211_hdr * header, size_t len) {
 
                                     // Hostname Option
                                     if (bootopt == 12) {
-                                        hex_dump("Got and interesting packet:", vendorbuf+i+2, optlen);
-                                        hex_dump("Got and interesting packet:", header, len);
-
                                         struct ssid_record * host = g_hash_table_lookup(hosts, header->addr3);
                                         if (host) {
                                             const size_t copysize = min(optlen, HOST_NAME_MAX_SIZE-1);

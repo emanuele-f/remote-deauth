@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <glib.h>
 
-// For custom data types (like the exciting 'le16' with auto conversion to little-endian!)
 #include "ieee802_11.h"
 
 #define WLANSTR_switch(t) { char * __hrmxe = NULL; switch((t)) {

@@ -40,11 +40,12 @@ struct ssid_record {
     u_char assoc[6];
     char ssid_s[MAC_ADDRESS_CHAR_SIZE];
     char hostname_s[HOST_NAME_MAX_SIZE];
-    u8 blacklisted;       // 1: if host its currently blacklisted
-
     le32 fseen;           // first seen
     le32 lseen;           // last seen
     le32 ldeauth;         // last deauth sent
+    u8 blacklisted;       // 1: if host its currently blacklisted
+    u8 _padding;          // align to 32bit boundaries
+    u16 _padding2;
 } STRUCT_PACKED;
 
 struct bssid_record {

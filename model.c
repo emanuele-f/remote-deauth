@@ -35,8 +35,10 @@ static void ap_destroy_fn(void * rec) {
 }
 
 static inline int send_client_data(int sock) {
+    struct ssid_record lehost = {0};
+
     // 4 bytes: number of APs
-    const le32 naps = g_slist_length(aps);
+    const le32 naps = host_to_le32(g_slist_length(aps));
     if (write_checked(sock, &naps, sizeof(naps)) < 0)
         return -1;
 
@@ -52,18 +54,22 @@ static inline int send_client_data(int sock) {
             return -1;
 
         // 4 bytes: number of hosts
-        const le32 nhosts = g_slist_length(ap->hosts);
+        const le32 nhosts = host_to_le32(g_slist_length(ap->hosts));
         if (write_checked(sock, &nhosts, sizeof(nhosts)) < 0)
             return -1;
 
         for (GSList * i=ap->hosts; i!=NULL; i = i->next) {
             const struct ssid_record * host = (struct ssid_record *) i->data;
+            lehost = *host;
+            lehost.fseen = host_to_le32(lehost.fseen);
+            lehost.lseen = host_to_le32(lehost.lseen);
+            lehost.ldeauth = host_to_le32(lehost.ldeauth);
 
-            if (write_checked(sock, host, sizeof(struct ssid_record)) < 0)
+            if (write_checked(sock, &lehost, sizeof(struct ssid_record)) < 0)
                 return -1;
         }
     }
-    
+
     return 0;
 }
 
@@ -72,8 +78,9 @@ static inline int read_server_data(int fd) {
 
     if (read_checked(fd, &naps, sizeof(naps)) <= 0)
         return -1;
+    naps = le_to_host32(naps);
 
-    //~ printf("Reading %u ap elements\n", naps);
+    //~ printf("Reading %u ap elements\n", naps);lehost.fseen = host_to_le32(lehost.fseen);
 
     struct ssid_record ap;
     for (uint i=0; i<naps; i++) {
@@ -93,6 +100,7 @@ static inline int read_server_data(int fd) {
         le32 nhosts;
         if (read_checked(fd, &nhosts, sizeof(nhosts)) <= 0)
             return -1;
+        nhosts = le_to_host32(nhosts);
 
         //~ printf("Has %u hosts\n", nhosts);
 
@@ -100,6 +108,9 @@ static inline int read_server_data(int fd) {
         for (uint j=0; j < nhosts; j++) {
             if (read_checked(fd, &host, sizeof(host)) <= 0)
                 return -1;
+            host.fseen = le_to_host32(host.fseen);
+            host.lseen = le_to_host32(host.lseen);
+            host.ldeauth = le_to_host32(host.ldeauth);
             //~ printf("Host: %s\n", host.ssid_s);
 
             struct ssid_record * newhost = host_create(host.ssid);
@@ -171,7 +182,7 @@ int ap_add_host(const u_char * bssid, const struct ssid_record * host) {
     struct bssid_record * ap = ap_lookup(bssid);
     if (! ap)
         return -1;
-    
+
     ap->hosts = g_slist_append(ap->hosts, (void *) host);
     return 0;
 }
