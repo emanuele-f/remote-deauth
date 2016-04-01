@@ -53,7 +53,7 @@ static u_char curmac[6] = {0};      // the current selected mac
 #define UI_WINDOW_PADDING_X 2
 #define UI_WINDOW_PADDING_Y 1
 #define UI_WINDOW_HEADER_H 1
-#define UI_WINDOW_HOSTS_CHAN 48
+#define UI_WINDOW_HOSTS_CHAN 49
 #define UI_WINDOW_HEADER_RIGHT 50
 #define UI_WINDOW_HEADER_TOTH (UI_WINDOW_HEADER_H + UI_WINDOW_PADDING_Y)
 #define UI_WINDOW_HOSTS_TOTH (UI_WINDOW_H - 4 * UI_WINDOW_PADDING_Y - UI_WINDOW_HEADER_TOTH)
@@ -201,7 +201,7 @@ void ui_update_hosts() {
             wattroff(hostsw, COLOR_PAIR(palette));
             if (essid[0])
                 wprintw(hostsw, " %s", essid);
-            wprintw(hostsw, " [%u]", g_slist_length(rec->hosts));
+            wprintw(hostsw, " [%u]  %d dBm", g_slist_length(rec->hosts), rec->signal);
 
             if (rec->channel > 0)
                 mvwprintw(hostsw, y, UI_WINDOW_HOSTS_CHAN, "CH %u", rec->channel);

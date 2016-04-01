@@ -396,28 +396,39 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
 
         // radiotap: requires that all fields in the radiotap header are aligned to natural boundaries
         uint32_t it_present = le_to_host32(*(u32*)(radiodata + 4));
-        if (it_present & 0x0008) {
-            // channel is present
+        uint8_t ch = 0;
+        int8_t signal = 0;
 
-            size_t nextbyte;
+        size_t nextbyte;
 
-            if(it_present & 0x80000000)         // Extended bitmap (4 bytes)
-                nextbyte = 12;
-            else
-                nextbyte = 8;
+        if(it_present & 0x80000000)         // Extended bitmap (4 bytes)
+            nextbyte = 12;
+        else
+            nextbyte = 8;
 
-            if (it_present & 0x1)               // TSFT (8 bytes)
-                nextbyte += nextbyte % 8 + 8;
+        if (it_present & 0x1)               // TSFT (8 bytes)
+            nextbyte += nextbyte % 8 + 8;
 
-            nextbyte += ((it_present & 0x2) && 1);   // FLAGS 1 byte
-            nextbyte += ((it_present & 0x4) && 1);   // RATE: 1 byte
+        nextbyte += ((it_present & 0x2) && 1);   // FLAGS 1 byte
+        nextbyte += ((it_present & 0x4) && 1);   // RATE: 1 byte
 
+        if (it_present & 0x8) {
             const le16 freq = le_to_host16(*(u16 *)(radiodata + nextbyte + nextbyte % 2));
-            const uint8_t ch = get_channel(freq);
-            if (ch != -1)
-                bssrec->channel = ch;
-            //~ printf("%u %x %d\n", nextbyte, freq, get_channel(freq));
+            ch = get_channel(freq);
+            nextbyte += 2;
         }
+
+        if (it_present & 0x10)              // FHSS (2 bytes)
+            nextbyte += nextbyte % 2 + 2;
+
+        if (it_present & 0x20)
+            signal = *(radiodata + nextbyte);
+        // END radiotap
+
+        if (ch)
+            bssrec->channel = ch;
+        if (signal)
+            bssrec->signal = signal;
 
         // TODO only set this if AP is the transmitter
         bssrec->ssid.lseen = now;

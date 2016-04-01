@@ -53,6 +53,10 @@ static inline int send_client_data(int sock) {
         if (write_checked(sock, &(ap->channel), 1) < 0)
             return -1;
 
+        // AP signal
+        if (write_checked(sock, &(ap->signal), 1) < 0)
+            return -1;
+
         // AP essid
         if (write_checked(sock, ap->essid, SSID_MAX_SIZE) < 0)
             return -1;
@@ -96,6 +100,9 @@ static inline int read_server_data(int fd) {
         newap->ssid = ap;
 
         if (read_checked(fd, &(newap->channel), 1) < 0)
+            return -1;
+
+        if (read_checked(fd, &(newap->signal), 1) < 0)
             return -1;
 
         if (read_checked(fd, newap->essid, SSID_MAX_SIZE) < 0)
