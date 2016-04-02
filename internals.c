@@ -399,7 +399,7 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
 
         // radiotap: requires that all fields in the radiotap header are aligned to natural boundaries
         uint32_t it_present = le_to_host32(*(u32*)(radiodata + 4));
-        uint8_t ch = 0;
+        //~ uint8_t ch = 0;
         int8_t signal = 0;
 
         size_t nextbyte;
@@ -415,11 +415,11 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
         nextbyte += ((it_present & 0x2) && 1);   // FLAGS 1 byte
         nextbyte += ((it_present & 0x4) && 1);   // RATE: 1 byte
 
-        if (it_present & 0x8) {
+        if (it_present & 0x8) {             // Channel + Channel type (2 + 2 bytes)
             // NB: this is the network card frequency! AP can still be in another channel
             //~ const le16 freq = le_to_host16(*(u16 *)(radiodata + nextbyte + nextbyte % 2));
             //~ ch = get_channel(freq);
-            nextbyte += 2;
+            nextbyte += nextbyte % 2 + 4;
         }
 
         if (it_present & 0x10)              // FHSS (2 bytes)
