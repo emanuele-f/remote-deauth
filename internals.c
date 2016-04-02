@@ -386,11 +386,14 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
             struct ieee80211_mgmt * frame = (struct ieee80211_mgmt *)header;
             const size_t elen = len - (frame->u.beacon.variable - data);
 
-            if (ieee802_11_parse_elems(frame->u.beacon.variable, elen, &elems, 0) != ParseFailed &&
-              elems.ssid_len > 0) {
+            ieee802_11_parse_elems(frame->u.beacon.variable, elen, &elems, 0);
+            if (elems.ssid_len > 0) {
                 const size_t count = elems.ssid_len < (SSID_MAX_SIZE-1) ? elems.ssid_len : (SSID_MAX_SIZE-1);
                 strncpy(bssrec->essid, (char *)elems.ssid, count);
                 bssrec->essid[count] = '\0';
+            }
+            if (elems.ds_params_len >= 1) {
+                bssrec->channel = elems.ds_params[0];
             }
         }
 
@@ -413,8 +416,9 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
         nextbyte += ((it_present & 0x4) && 1);   // RATE: 1 byte
 
         if (it_present & 0x8) {
-            const le16 freq = le_to_host16(*(u16 *)(radiodata + nextbyte + nextbyte % 2));
-            ch = get_channel(freq);
+            // NB: this is the network card frequency! AP can still be in another channel
+            //~ const le16 freq = le_to_host16(*(u16 *)(radiodata + nextbyte + nextbyte % 2));
+            //~ ch = get_channel(freq);
             nextbyte += 2;
         }
 
@@ -425,8 +429,8 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
             signal = *(radiodata + nextbyte);
         // END radiotap
 
-        if (ch)
-            bssrec->channel = ch;
+        //~ if (ch)
+            //~ bssrec->channel = ch;
         if (signal)
             bssrec->signal = signal;
 
