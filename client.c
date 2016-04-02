@@ -67,6 +67,8 @@ static WINDOW * mainw = NULL;
 static WINDOW * headerw = NULL;
 static WINDOW * wbox = NULL;
 static WINDOW * hostsw = NULL;
+static u_char ShowCounters = 0;
+static u_char ShowInfo = 1;
 
 static void init_ui() {
     initscr();
@@ -204,13 +206,15 @@ void ui_update_hosts() {
             if (essid[0])
                 wprintw(hostsw, " %s", essid);
 
-            if (rec->signal)
-                mvwprintw(hostsw, y, UI_WINDOW_HOSTS_DBM, "%d dBm", rec->signal);
+            if (ShowInfo) {
+                if (rec->signal)
+                    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_DBM, "%d dBm", rec->signal);
+                if (rec->channel > 0)
+                    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_CHAN, "CH %u", rec->channel);
 
-            if (rec->channel > 0)
-                mvwprintw(hostsw, y, UI_WINDOW_HOSTS_CHAN, "CH %u", rec->channel);
-            mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
-
+                mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(rec->ssid.lseen));
+            } else
+                wprintw(hostsw, "\n");
             y++;
         }
         vpy++;
@@ -246,11 +250,15 @@ void ui_update_hosts() {
                         wprintw(hostsw, " %s", host->hostname_s);
 
                     // sent and recived data packets
-                    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_CTR, "%s",
-                      human_format_u32(host->datasent));
-                    wprintw(hostsw, " %s", human_format_u32(host->datarecv));
-
-                    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
+                    if (ShowCounters) {
+                        mvwprintw(hostsw, y, UI_WINDOW_HOSTS_CTR, "%s",
+                          human_format_u32(host->datasent));
+                        wprintw(hostsw, " %s", human_format_u32(host->datarecv));
+                    }
+                    if (ShowInfo)
+                        mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
+                    else
+                        wprintw(hostsw, "\n");
                     y++;
                 }
                 vpy++;
@@ -617,6 +625,14 @@ int main() {
                                 ui_restore_selection();
                                 ui_update_hosts();
                             }
+                            break;
+                        case 'c':
+                            ShowCounters = !ShowCounters;
+                            ui_update_hosts();
+                            break;
+                        case 'i':
+                            ShowInfo = !ShowInfo;
+                            ui_update_hosts();
                             break;
                         case 'q':
                             now_exit(0);
