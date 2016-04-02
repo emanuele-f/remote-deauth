@@ -18,8 +18,9 @@ No broadcast deauth allowed.
 - make server
 - sudo ./server
 
-You will need an external tool to start the interface in monitor mode and to
-change channel.
+You will need an external tool to start the interface in monitor mode.
+If you have iwconfig installed, you can use utils/hopper.sh script to hop
+wifi channels.
 
 If you have installed the aircrack suite, you can use:
 
