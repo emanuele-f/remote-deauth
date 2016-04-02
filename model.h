@@ -43,9 +43,9 @@ struct ssid_record {
     le32 fseen;           // first seen
     le32 lseen;           // last seen
     le32 ldeauth;         // last deauth sent
+    le32 datasent;        // total sent data packets
+    le32 datarecv;        // total received data packets
     u8 blacklisted;       // 1: if host its currently blacklisted
-    u8 _padding;          // align to 32bit boundaries
-    u16 _padding2;
 } STRUCT_PACKED;
 
 struct bssid_record {

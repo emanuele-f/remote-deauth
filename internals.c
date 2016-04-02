@@ -363,8 +363,10 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
     // END filter bad packets
 
     struct ieee80211_hdr * header = (struct ieee80211_hdr *) data;
+    enum pck_direction_e direction;
 
-    get_bssid_and_station(header, &bssid, &station);
+    get_bssid_and_station(header, &bssid, &station, &direction);
+    const u_short isdata = WLAN_FC_GET_TYPE(header->frame_control) == WLAN_FC_TYPE_DATA;
     time_t now = time(0);
 
     if (bssid) {
@@ -434,8 +436,16 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
         if (signal)
             bssrec->signal = signal;
 
-        // TODO only set this if AP is the transmitter
-        bssrec->ssid.lseen = now;
+        // Update counters
+        if (direction == PCKDIR_AP_TO_STATION) {
+            bssrec->ssid.lseen = now;
+
+            if (isdata)
+                bssrec->ssid.datasent += 1;
+        } else if (direction == PCKDIR_STATION_TO_AP) {
+            if (isdata)
+                bssrec->ssid.datarecv += 1;
+        }
     }
 
     if (station) {
@@ -466,8 +476,16 @@ void pckdata_handler(const u_char * radiodata, size_t radiolen) {
                 update_attacking_status(host->ssid);
         }
 
-        host->lseen = now;
-        //~ debug_print_bssids(aps, whois);
+        // Update counters
+        if (direction == PCKDIR_AP_TO_STATION) {
+            if (isdata)
+                host->datarecv += 1;
+        } else if (direction == PCKDIR_STATION_TO_AP) {
+            host->lseen = now;
+
+            if (isdata)
+                host->datasent += 1;
+        }
     }
 
     // ieee-801.11

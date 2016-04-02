@@ -54,6 +54,25 @@ char* etheraddr_string(const u_char *ep, char *buf) {
   return (buf);
 }
 
+static char humanstr[64];
+static const char SizeSuffixes[] = {' ', 'K', 'M', 'G', 'T'};
+
+const char * human_format_u32(uint32_t value) {
+    int i;
+    uint32_t dec = 0;
+
+    for (i = 0; i < sizeof(SizeSuffixes); i++) {
+        if (value < 1000)
+            break;
+
+        dec = value % 1000;
+        value /= 1000;
+    }
+
+    sprintf(humanstr, "%3u.%02u %c", value, dec/10, SizeSuffixes[i]);
+    return (const char *) humanstr;
+}
+
 int32_t gmt2local(time_t t) {
   int dt, dir;
   struct tm *gmt, *loc;
@@ -94,7 +113,10 @@ int is_valid_mac(const u_char addr[6]) {
 /* Based on the packet type, returns a pair (bssid, apstation).
  * Pointers are set to NULL when no relevant information is found.
  */
-void get_bssid_and_station(const struct ieee80211_hdr * pck, const u_char ** bssid, const u_char ** station) {
+void get_bssid_and_station(const struct ieee80211_hdr * pck,
+  const u_char ** bssid,
+  const u_char ** station,
+  enum pck_direction_e * dir) {
     //~ u8 flags = WLAN_FC_GET_FLAGS(pck->frame_control);
     //~ const bool fromds = WLAN_FC_FLAG(pck->frame_control, WLAN_FC_FROMDS);
     //~ const bool tods = WLAN_FC_FLAG(pck->frame_control, WLAN_FC_TODS);
@@ -108,21 +130,25 @@ void get_bssid_and_station(const struct ieee80211_hdr * pck, const u_char ** bss
             // AD-HOC mode or DS internal packet (eg. beacon)
             *bssid = pck->addr3;
             *station = NULL;
+            *dir = PCKDIR_UNKNOWN;
             break;
         case 0x1:
             // From an host to the DS
             *bssid = pck->addr1;
             *station = pck->addr2;
+            *dir = PCKDIR_STATION_TO_AP;
             break;
         case 0x2:
             // From a DS to an host
             *station = pck->addr1;
             *bssid = pck->addr2;
+            *dir = PCKDIR_AP_TO_STATION;
             break;
         case 0x3:
             // From a DS to another: Transmitter taken as BSSID
             *station = NULL;
             *bssid = pck->addr2;
+            *dir = PCKDIR_UNKNOWN;
             break;
         default:
             *station = NULL;
@@ -136,11 +162,15 @@ void get_bssid_and_station(const struct ieee80211_hdr * pck, const u_char ** bss
         *station = NULL;
 }
 
+/* Returns an empty string if zero */
 const char * time_format(time_t t) {
-    const int s = (t + thiszone) % 86400;
-    snprintf(TimeString, sizeof(TimeString), "%02d:%02d:%02d.%06u",
-      s / 3600, (s % 3600) / 60, s % 60, (unsigned)t);
-
+    if (! t) {
+        TimeString[0] = '\0';
+    } else {
+        const int s = (t + thiszone) % 86400;
+        snprintf(TimeString, sizeof(TimeString), "%02d:%02d:%02d",
+        s / 3600, (s % 3600) / 60, s % 60);
+    }
     return (const char *)TimeString;
 }
 

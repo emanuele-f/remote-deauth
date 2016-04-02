@@ -53,12 +53,13 @@ static u_char curmac[6] = {0};      // the current selected mac
 #define UI_WINDOW_PADDING_X 2
 #define UI_WINDOW_PADDING_Y 1
 #define UI_WINDOW_HEADER_H 1
-#define UI_WINDOW_HOSTS_CHAN 49
-#define UI_WINDOW_HOSTS_DBM 40
+#define UI_WINDOW_HOSTS_CHAN 55
+#define UI_WINDOW_HOSTS_DBM 45
+#define UI_WINDOW_HOSTS_CTR 42
 #define UI_WINDOW_HEADER_RIGHT 50
 #define UI_WINDOW_HEADER_TOTH (UI_WINDOW_HEADER_H + UI_WINDOW_PADDING_Y)
 #define UI_WINDOW_HOSTS_TOTH (UI_WINDOW_H - 4 * UI_WINDOW_PADDING_Y - UI_WINDOW_HEADER_TOTH)
-#define UI_WINDOW_HOSTS_RIGHT 56
+#define UI_WINDOW_HOSTS_RIGHT 62
 #define UI_PALETTE_NORMAL 1
 #define UI_PALETTE_BLACKLISTED 2
 
@@ -202,7 +203,6 @@ void ui_update_hosts() {
             wattroff(hostsw, COLOR_PAIR(palette));
             if (essid[0])
                 wprintw(hostsw, " %s", essid);
-            wprintw(hostsw, " [%u]\n", g_slist_length(rec->hosts));
 
             if (rec->signal)
                 mvwprintw(hostsw, y, UI_WINDOW_HOSTS_DBM, "%d dBm", rec->signal);
@@ -244,6 +244,11 @@ void ui_update_hosts() {
                         wprintw(hostsw, " %s", stationame);
                     else if (host->hostname_s)
                         wprintw(hostsw, " %s", host->hostname_s);
+
+                    // sent and recived data packets
+                    mvwprintw(hostsw, y, UI_WINDOW_HOSTS_CTR, "%s",
+                      human_format_u32(host->datasent));
+                    wprintw(hostsw, " %s", human_format_u32(host->datarecv));
 
                     mvwprintw(hostsw, y, UI_WINDOW_HOSTS_RIGHT, "%s\n", time_format(host->lseen));
                     y++;

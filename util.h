@@ -37,10 +37,20 @@
 
 #define WLANSTR_UNKNOWN "*unknown*"
 
+enum pck_direction_e {
+    PCKDIR_UNKNOWN,
+    PCKDIR_AP_TO_STATION,
+    PCKDIR_STATION_TO_AP,
+};
+
 char* etheraddr_string(const u_char *ep, char *buf);
+const char * human_format_u32(uint32_t value);
 int32_t gmt2local(time_t t);
 int is_valid_mac(const u_char addr[6]);
-void get_bssid_and_station(const struct ieee80211_hdr * pck, const u_char ** bssid, const u_char ** station);
+void get_bssid_and_station(const struct ieee80211_hdr * pck,
+  const u_char ** bssid,
+  const u_char ** station,
+  enum pck_direction_e * dir);
 const char * time_format(time_t t);
 void free_fn(void * item);
 

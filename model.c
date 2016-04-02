@@ -72,6 +72,8 @@ static inline int send_client_data(int sock) {
             lehost.fseen = host_to_le32(lehost.fseen);
             lehost.lseen = host_to_le32(lehost.lseen);
             lehost.ldeauth = host_to_le32(lehost.ldeauth);
+            lehost.datasent = host_to_le32(lehost.datasent);
+            lehost.datarecv = host_to_le32(lehost.datarecv);
 
             if (write_checked(sock, &lehost, sizeof(struct ssid_record)) < 0)
                 return -1;
@@ -117,15 +119,18 @@ static inline int read_server_data(int fd) {
 
         struct ssid_record host;
         for (uint j=0; j < nhosts; j++) {
-            if (read_checked(fd, &host, sizeof(host)) <= 0)
+
+            if (read_checked(fd, &host, sizeof(struct ssid_record)) <= 0)
                 return -1;
             host.fseen = le_to_host32(host.fseen);
             host.lseen = le_to_host32(host.lseen);
             host.ldeauth = le_to_host32(host.ldeauth);
+            host.datasent = le_to_host32(host.datasent);
+            host.datarecv = le_to_host32(host.datarecv);
             //~ printf("Host: %s\n", host.ssid_s);
 
             struct ssid_record * newhost = host_create(host.ssid);
-            memcpy(newhost, &host, sizeof(host));
+            memcpy(newhost, &host, sizeof(struct ssid_record));
 
             ap_add_host(ap.ssid, newhost);
         }
