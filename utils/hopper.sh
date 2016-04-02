@@ -9,7 +9,7 @@ if [[ -z "$iwconfig" ]]; then
 fi
 
 if [[ $# -ne 2 ]]; then
-    echo "Usage: $0 [interface] [hoptime]" >&2
+    echo "Usage: `basename $0` [interface] [hoptime]" >&2
     exit 1
 fi
 
